@@ -1,0 +1,282 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ── Design tokens ─────────────────────────────────────────────────────────
+   shadcn tokens plus the Apple Notes palette (yellow accent, gray chrome). */
+:root {
+  --radius: 0.5rem;
+
+  --background: #ffffff;
+  --foreground: rgb(0 0 0 / 0.85);
+  --card: #ffffff;
+  --card-foreground: rgb(0 0 0 / 0.85);
+  --popover: #ffffff;
+  --popover-foreground: rgb(0 0 0 / 0.85);
+  --primary: #e3a21a;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f2f2;
+  --secondary-foreground: rgb(0 0 0 / 0.85);
+  --muted: #f2f2f2;
+  --muted-foreground: rgb(0 0 0 / 0.5);
+  --accent: rgb(0 0 0 / 0.06);
+  --accent-foreground: rgb(0 0 0 / 0.85);
+  --destructive: #ff3b30;
+  --border: rgb(0 0 0 / 0.1);
+  --input: rgb(0 0 0 / 0.12);
+  --ring: rgb(227 162 26 / 0.6);
+
+  /* Apple Notes specifics */
+  --notes-accent: #e3a21a;
+  --notes-selection: #fad962;
+  --notes-selection-foreground: rgb(0 0 0 / 0.85);
+  --notes-selection-inactive: rgb(0 0 0 / 0.08);
+  --notes-sidebar: rgb(236 236 236 / 0.55);
+  --notes-separator: rgb(0 0 0 / 0.08);
+  --notes-toolbar-icon: rgb(0 0 0 / 0.55);
+  --notes-search-match: rgb(250 217 98 / 0.75);
+  --notes-caret: #e3a21a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1e1e1e;
+    --foreground: rgb(255 255 255 / 0.88);
+    --card: #262626;
+    --card-foreground: rgb(255 255 255 / 0.88);
+    --popover: #2a2a2a;
+    --popover-foreground: rgb(255 255 255 / 0.88);
+    --primary: #e8ae2c;
+    --primary-foreground: #1e1e1e;
+    --secondary: #2c2c2c;
+    --secondary-foreground: rgb(255 255 255 / 0.88);
+    --muted: #2c2c2c;
+    --muted-foreground: rgb(255 255 255 / 0.5);
+    --accent: rgb(255 255 255 / 0.08);
+    --accent-foreground: rgb(255 255 255 / 0.88);
+    --destructive: #ff453a;
+    --border: rgb(255 255 255 / 0.1);
+    --input: rgb(255 255 255 / 0.14);
+    --ring: rgb(232 174 44 / 0.6);
+
+    --notes-accent: #e8ae2c;
+    --notes-selection: #6f5b17;
+    --notes-selection-foreground: rgb(255 255 255 / 0.92);
+    --notes-selection-inactive: rgb(255 255 255 / 0.1);
+    --notes-sidebar: rgb(40 40 40 / 0.45);
+    --notes-separator: rgb(255 255 255 / 0.08);
+    --notes-toolbar-icon: rgb(255 255 255 / 0.6);
+    --notes-search-match: rgb(232 174 44 / 0.45);
+    --notes-caret: #e8ae2c;
+  }
+}
+
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-notes-accent: var(--notes-accent);
+  --color-notes-selection: var(--notes-selection);
+  --color-notes-selection-foreground: var(--notes-selection-foreground);
+  --color-notes-selection-inactive: var(--notes-selection-inactive);
+  --color-notes-sidebar: var(--notes-sidebar);
+  --color-notes-separator: var(--notes-separator);
+  --color-notes-toolbar-icon: var(--notes-toolbar-icon);
+  --color-notes-search-match: var(--notes-search-match);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    /* Transparent so the window's native sidebar vibrancy shows through. */
+    background: transparent;
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    cursor: default;
+    overflow: hidden;
+  }
+  input,
+  textarea,
+  .cm-content {
+    user-select: text;
+  }
+  button {
+    cursor: default;
+  }
+}
+
+@utility drag-region {
+  -webkit-app-region: drag;
+}
+@utility no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* ── Editor (CodeMirror) ───────────────────────────────────────────────── */
+.note-editor .cm-editor {
+  flex: 1;
+  font-size: var(--note-font-size, 15px);
+  background: transparent;
+}
+.note-editor .cm-editor.cm-focused {
+  outline: none;
+}
+.note-editor .cm-scroller {
+  flex-grow: 1;
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  overflow: visible;
+}
+.note-editor .cm-content {
+  padding: 0 0 2rem;
+  caret-color: var(--notes-caret);
+}
+.note-editor .cm-line {
+  padding: 0;
+}
+.note-editor .cm-cursor {
+  border-left: 2px solid var(--notes-caret);
+}
+.note-editor .cm-selectionBackground,
+.note-editor .cm-focused .cm-selectionBackground {
+  background: var(--notes-search-match) !important;
+}
+/* Vim normal-mode block cursor */
+.note-editor .cm-fat-cursor {
+  background: color-mix(in srgb, var(--notes-caret) 55%, transparent) !important;
+  color: inherit !important;
+  outline: none !important;
+}
+.note-editor .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: none !important;
+  outline: 1px solid color-mix(in srgb, var(--notes-caret) 70%, transparent) !important;
+}
+.note-editor .cm-title-line {
+  font-size: 1.75em;
+  font-weight: 700;
+  line-height: 1.3;
+  padding-bottom: 0.15em;
+}
+.note-editor .cm-checked-line {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
+}
+.note-editor .cm-searchMatch {
+  background: var(--notes-search-match);
+  border-radius: 2px;
+}
+.note-editor .cm-searchMatch-selected {
+  background: var(--notes-accent);
+}
+
+/* Find bar (⌘F) */
+.note-editor .cm-panels {
+  z-index: 5;
+  background: var(--background);
+  color: var(--foreground);
+  border-color: var(--notes-separator) !important;
+}
+.note-editor .cm-panels-top {
+  position: sticky;
+  top: 0;
+}
+.note-editor .cm-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+.note-editor .cm-search br {
+  display: none;
+}
+.note-editor .cm-search input[type="checkbox"] {
+  accent-color: var(--notes-accent);
+}
+.note-editor .cm-textfield {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--input);
+  background: var(--background);
+  font-size: 12px;
+  outline: none;
+}
+.note-editor .cm-textfield:focus {
+  border-color: var(--notes-accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.note-editor .cm-button {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--input);
+  background: var(--secondary);
+  background-image: none;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+.note-editor .cm-search button[name="close"] {
+  margin-left: auto;
+  font-size: 16px;
+  color: var(--muted-foreground);
+  background: none;
+  border: 0;
+}
+
+/* Vim status / command line */
+.note-editor .cm-vim-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  padding: 0 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.note-editor .cm-vim-panel input {
+  background: transparent;
+  color: var(--foreground);
+  border: 0;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.note-editor .cm-vim-panel button {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
