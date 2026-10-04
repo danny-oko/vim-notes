@@ -64,7 +64,8 @@
       "target": [
         "dir"
       ],
-      "identity": null
+      "identity": "-",
+      "hardenedRuntime": false
     },
     "dmg": {
       "title": "Vim Notes"
