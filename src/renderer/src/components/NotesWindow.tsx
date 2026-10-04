@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react'
+import type { PanelImperativeHandle } from 'react-resizable-panels'
 import { ChevronLeft, LayoutGrid, List, ListChecks, PanelLeft, Search, Share, SquarePen, Trash2, X } from 'lucide-react'
 import { NoteEditor } from '@/components/editor/NoteEditor'
 import { editorHandle } from '@/components/editor/editor-handle'
@@ -7,11 +9,10 @@ import { Sidebar } from '@/components/sidebar/Sidebar'
 import { ToolbarButton } from '@/components/ToolbarButton'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { deleteNoteWithConfirm } from '@/lib/actions'
+import { deleteNoteWithConfirm, SEARCH_INPUT_ID } from '@/lib/actions'
 import { notesInView } from '@/lib/note-order'
+import { cn } from '@/lib/utils'
 import { findNote, useNotes } from '@/store/notes-store'
-
-export const SEARCH_INPUT_ID = 'notes-search'
 
 /** The three-column Apple Notes window: folders │ notes │ editor. */
 export function NotesWindow() {
@@ -19,36 +20,65 @@ export function NotesWindow() {
   const galleryOpen = useNotes(
     (s) => s.settings!.viewMode === 'gallery' && s.focusedPane === 'editor' && !!s.selectedNoteId
   )
-  const toggleSidebar = (): void => void useNotes.getState().updateSettings({ sidebarVisible: !settings.sidebarVisible })
+  const { updateSettings } = useNotes.getState()
   const gallery = settings.viewMode === 'gallery'
+  // ⌘B hides folders + list together; in gallery view the notes are the main content.
+  const listShown = gallery || settings.listVisible
+  const sidebarShown = settings.sidebarVisible && listShown
+
+  const sidebar = useAnimatedPanel(sidebarShown, (shown) => {
+    if (listShown) void updateSettings({ sidebarVisible: shown })
+  })
+  const list = useAnimatedPanel(listShown, (shown) => {
+    if (!gallery) void updateSettings({ listVisible: shown })
+  })
+  // Fixed after mount: changing a panel's defaultSize later makes the layout re-validate.
+  const [initial] = useState(() => ({ sidebar: sidebarShown ? 220 : 0, list: listShown ? 290 : 0 }))
 
   return (
-    <ResizablePanelGroup orientation="horizontal" className="h-full">
-      {settings.sidebarVisible && (
-        <>
-          <ResizablePanel id="sidebar" defaultSize={220} minSize={170} maxSize={360} groupResizeBehavior="preserve-pixel-size">
-            <Sidebar onToggle={toggleSidebar} />
-          </ResizablePanel>
-          <ResizableHandle className="bg-notes-separator" />
-        </>
-      )}
+    <ResizablePanelGroup
+      orientation="horizontal"
+      className={cn('h-full', (sidebar.animating || list.animating) && 'animate-panels')}
+    >
+      <ResizablePanel
+        id="sidebar"
+        panelRef={sidebar.ref}
+        defaultSize={initial.sidebar}
+        minSize={170}
+        maxSize={360}
+        collapsible
+        collapsedSize={0}
+        groupResizeBehavior="preserve-pixel-size"
+        onResize={sidebar.onResize}
+      >
+        {/* Fixed min width so the sidebar slides instead of reflowing while animating. */}
+        <div className="h-full min-w-[170px]">
+          <Sidebar onToggle={() => void updateSettings({ sidebarVisible: false })} />
+        </div>
+      </ResizablePanel>
+      <ResizableHandle className={cn('bg-notes-separator', !sidebarShown && 'opacity-0')} />
       {!galleryOpen && (
         <ResizablePanel
           id="list"
-          defaultSize={gallery ? undefined : 290}
+          panelRef={list.ref}
+          defaultSize={gallery ? undefined : initial.list}
           minSize={gallery ? 300 : 220}
           maxSize={gallery ? undefined : 520}
+          collapsible={!gallery}
+          collapsedSize={0}
           groupResizeBehavior={gallery ? 'preserve-relative-size' : 'preserve-pixel-size'}
-          className="flex flex-col bg-background"
+          onResize={list.onResize}
         >
-          <ListToolbar onToggleSidebar={toggleSidebar} />
-          <NotesPane />
+          <div className={cn('flex h-full flex-col bg-background', !gallery && 'min-w-[220px]')}>
+            <ListToolbar />
+            <NotesPane />
+          </div>
         </ResizablePanel>
       )}
-      {!gallery && <ResizableHandle className="bg-notes-separator" />}
+      {!gallery && <ResizableHandle className={cn('bg-notes-separator', !listShown && 'opacity-0')} />}
       {(!gallery || galleryOpen) && (
         <ResizablePanel id="editor" minSize={320} className="flex flex-col bg-background">
-          <EditorToolbar onToggleSidebar={toggleSidebar} />
+          <EditorToolbar />
           <div className="min-h-0 flex-1">
             <NoteEditor />
           </div>
@@ -58,23 +88,64 @@ export function NotesWindow() {
   )
 }
 
-function SidebarToggle({ onToggle }: { onToggle: () => void }) {
-  const visible = useNotes((s) => s.settings!.sidebarVisible)
-  if (visible) return null
-  // Leave room for the traffic lights when the sidebar is hidden.
+const PANEL_ANIMATION_MS = 220
+
+/**
+ * Shows/hides a side panel with a short slide, like Apple Notes. The width
+ * transition is only enabled while toggling, so dragging a divider and
+ * resizing the window stay immediate. `onUserToggle` reports when the user
+ * drags the panel closed or open.
+ */
+function useAnimatedPanel(visible: boolean, onUserToggle: (shown: boolean) => void) {
+  const ref = useRef<PanelImperativeHandle | null>(null)
+  const [animating, setAnimating] = useState(false)
+  // Resize reports during the slide are animation frames, not user drags.
+  const animatingRef = useRef(false)
+
+  useEffect(() => {
+    const panel = ref.current
+    if (!panel || panel.isCollapsed() === !visible) return
+    animatingRef.current = true
+    setAnimating(true)
+    // Let the transition class apply before the size changes.
+    const frame = requestAnimationFrame(() => (visible ? panel.expand() : panel.collapse()))
+    const timer = setTimeout(() => {
+      animatingRef.current = false
+      setAnimating(false)
+    }, PANEL_ANIMATION_MS + 50)
+    return () => {
+      cancelAnimationFrame(frame)
+      clearTimeout(timer)
+      animatingRef.current = false
+    }
+  }, [visible])
+
+  const onResize = (size: { inPixels: number }): void => {
+    if (animatingRef.current) return
+    const shown = size.inPixels > 0
+    if (shown !== visible) onUserToggle(shown)
+  }
+
+  return { ref, animating, onResize }
+}
+
+/** Re-opens a hidden panel; leaves room for the traffic lights when nothing is on the left. */
+function ShowPanelButton({ label, shortcut, onClick }: { label: string; shortcut: string; onClick: () => void }) {
   return (
     <div className="flex shrink-0 items-center pl-[72px]">
-      <ToolbarButton icon={PanelLeft} label="Show Folders" shortcut="⌥⌘S" onClick={onToggle} />
+      <ToolbarButton icon={PanelLeft} label={label} shortcut={shortcut} onClick={onClick} />
     </div>
   )
 }
 
-function ListToolbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
+function ListToolbar() {
   const library = useNotes((s) => s.library!)
   const selection = useNotes((s) => s.selection)
   const search = useNotes((s) => s.search)
   const viewMode = useNotes((s) => s.settings!.viewMode)
   const selectedNoteId = useNotes((s) => s.selectedNoteId)
+  const sidebarVisible = useNotes((s) => s.settings!.sidebarVisible)
+  const { updateSettings } = useNotes.getState()
   const count = notesInView(library, selection, search).length
 
   const title = search.trim()
@@ -87,7 +158,9 @@ function ListToolbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
 
   return (
     <div className="drag-region flex h-[52px] shrink-0 items-center gap-1 pr-2.5">
-      <SidebarToggle onToggle={onToggleSidebar} />
+      {!sidebarVisible && (
+        <ShowPanelButton label="Show Folders" shortcut="⌥⌘S" onClick={() => void updateSettings({ sidebarVisible: true })} />
+      )}
       <div className="min-w-0 flex-1 pl-4 leading-tight">
         <div className="truncate text-[13px] font-bold">{title}</div>
         <div className="text-[11px] text-muted-foreground">
@@ -125,18 +198,23 @@ function ListToolbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   )
 }
 
-function EditorToolbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
+function EditorToolbar() {
   const note = useNotes((s) => findNote(s.library, s.selectedNoteId))
   const gallery = useNotes((s) => s.settings!.viewMode === 'gallery')
-  const { createNote, setFocusedPane } = useNotes.getState()
+  const listVisible = useNotes((s) => s.settings!.listVisible)
+  const sidebarVisible = useNotes((s) => s.settings!.sidebarVisible)
+  const { createNote, focusPane, updateSettings } = useNotes.getState()
   const editable = !!note && note.deletedAt === undefined
 
   return (
     <div className="drag-region flex h-[52px] shrink-0 items-center gap-1 px-2.5">
+      {!gallery && !listVisible && <ShowPanelButton label="Show Sidebar" shortcut="⌘B" onClick={() => useNotes.getState().toggleList()} />}
       {gallery && (
         <>
-          <SidebarToggle onToggle={onToggleSidebar} />
-          <ToolbarButton icon={ChevronLeft} label="Back to Gallery" onClick={() => setFocusedPane('list')} />
+          {!sidebarVisible && (
+            <ShowPanelButton label="Show Folders" shortcut="⌥⌘S" onClick={() => void updateSettings({ sidebarVisible: true })} />
+          )}
+          <ToolbarButton icon={ChevronLeft} label="Back to Gallery" onClick={() => focusPane('list')} />
         </>
       )}
       <ToolbarButton icon={SquarePen} label="New Note" shortcut="⌘N" onClick={() => void createNote()} />
@@ -156,7 +234,7 @@ function EditorToolbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
 
 function SearchField() {
   const search = useNotes((s) => s.search)
-  const { setSearch, setFocusedPane } = useNotes.getState()
+  const { setSearch, focusPane } = useNotes.getState()
 
   return (
     <div className="no-drag relative ml-1 w-44">
@@ -171,9 +249,9 @@ function SearchField() {
           if (e.key === 'Escape') {
             setSearch('')
             e.currentTarget.blur()
-            setFocusedPane('list')
+            focusPane('list')
           } else if (e.key === 'Enter' || e.key === 'ArrowDown') {
-            setFocusedPane('list')
+            focusPane('list')
           } else return
           e.preventDefault()
         }}

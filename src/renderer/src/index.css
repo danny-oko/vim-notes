@@ -4,6 +4,8 @@
 /* ── Design tokens ─────────────────────────────────────────────────────────
    shadcn tokens plus the Apple Notes palette (yellow accent, gray chrome). */
 :root {
+  /* Native scrollbars, inputs and checkboxes follow the OS appearance too. */
+  color-scheme: light dark;
   --radius: 0.5rem;
 
   --background: #ffffff;
@@ -142,6 +144,22 @@
   -webkit-app-region: no-drag;
 }
 
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+/* Panels may shrink below their content (the sidebar collapses to 0). */
+[data-panel] {
+  min-width: 0;
+  overflow: hidden;
+}
+/* Sidebar show/hide slide; only enabled while toggling (see NotesWindow). */
+.animate-panels > [data-panel] {
+  transition: flex-grow 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-panels > [data-panel] {
+    transition: none;
+  }
+}
+
 /* ── Editor (CodeMirror) ───────────────────────────────────────────────── */
 .note-editor .cm-editor {
   flex: 1;
@@ -166,6 +184,25 @@
 }
 .note-editor .cm-cursor {
   border-left: 2px solid var(--notes-caret);
+}
+/* Smooth caret: the cursor glides between positions (like VS Code's
+   "smooth caret animation") and fades instead of hard-blinking. */
+.note-editor .cm-cursor,
+.note-editor .cm-fat-cursor {
+  transition:
+    left 80ms ease-out,
+    top 80ms ease-out,
+    width 80ms ease-out,
+    height 80ms ease-out;
+}
+.note-editor .cm-cursorLayer {
+  animation-timing-function: ease-in-out !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .note-editor .cm-cursor,
+  .note-editor .cm-fat-cursor {
+    transition: none;
+  }
 }
 .note-editor .cm-selectionBackground,
 .note-editor .cm-focused .cm-selectionBackground {
@@ -211,50 +248,53 @@
   position: sticky;
   top: 0;
 }
-.note-editor .cm-search {
+.note-editor .find-bar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 4px;
+  padding: 6px 0;
   font-family: var(--font-sans);
   font-size: 12px;
 }
-.note-editor .cm-search br {
-  display: none;
-}
-.note-editor .cm-search input[type="checkbox"] {
-  accent-color: var(--notes-accent);
-}
-.note-editor .cm-textfield {
+.note-editor .find-bar-input {
+  flex: 0 1 240px;
+  min-width: 120px;
   height: 24px;
   padding: 0 8px;
   border-radius: 6px;
   border: 1px solid var(--input);
   background: var(--background);
+  color: var(--foreground);
   font-size: 12px;
   outline: none;
+  transition: border-color 120ms, box-shadow 120ms;
 }
-.note-editor .cm-textfield:focus {
+.note-editor .find-bar-input:focus {
   border-color: var(--notes-accent);
   box-shadow: 0 0 0 3px var(--ring);
 }
-.note-editor .cm-button {
+.note-editor .find-bar-button {
   height: 24px;
-  padding: 0 10px;
+  min-width: 24px;
+  padding: 0 8px;
   border-radius: 6px;
-  border: 1px solid var(--input);
-  background: var(--secondary);
-  background-image: none;
-  font-size: 12px;
-  text-transform: capitalize;
+  color: var(--notes-toolbar-icon);
+  font-size: 13px;
+  transition: background-color 120ms;
 }
-.note-editor .cm-search button[name="close"] {
+.note-editor .find-bar-button:hover {
+  background: var(--accent);
+}
+.note-editor .find-bar-button:last-child {
   margin-left: auto;
-  font-size: 16px;
+  color: var(--notes-accent);
+  font-weight: 600;
+  font-size: 12px;
+}
+.note-editor .find-bar-status {
+  padding-left: 4px;
   color: var(--muted-foreground);
-  background: none;
-  border: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Vim status / command line */

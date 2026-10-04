@@ -14,7 +14,7 @@ interface NotesState {
   selectedNoteId: string | null
   search: string
   focusedPane: Pane
-  /** Bumped on every focus request so panes re-focus even if already “focused”. */
+  /** Bumped on every focusPane() request; panes move focus only when it changes. */
   focusTick: number
   /** Folder whose name is being edited inline in the sidebar. */
   editingFolder: FolderPath | null
@@ -31,7 +31,10 @@ interface NotesState {
   selectFolder(selection: Selection): void
   selectNote(id: string | null): void
   setSearch(query: string): void
-  setFocusedPane(pane: Pane): void
+  /** Explicitly moves keyboard focus to a pane (keyboard shortcuts, :q, …). */
+  focusPane(pane: Pane): void
+  /** Records that a pane received focus by itself (click, Tab). Never moves focus. */
+  paneFocused(pane: Pane): void
   setEditingFolder(path: FolderPath | null): void
   consumeStartInsert(): void
   showError(error: unknown): void
@@ -46,6 +49,14 @@ interface NotesState {
   moveNote(id: string, folder: FolderPath): Promise<void>
   recoverNote(id: string): Promise<void>
 
+  /** ⌘Z / ⇧⌘Z outside the editor: undo/redo note deletes, moves, pins, folder renames. */
+  undoFileOperation(): Promise<void>
+  redoFileOperation(): Promise<void>
+  /** ⇧⌘E: focus the notes list, or switch between the list and the folders. */
+  focusExplorer(): void
+  /** ⌘B: show or hide the folders and notes list together. */
+  toggleList(): void
+
   createFolder(): Promise<void>
   renameFolder(path: FolderPath, name: string): Promise<void>
   deleteFolder(path: FolderPath): Promise<void>
@@ -56,6 +67,21 @@ const pendingContent = new Map<string, string>()
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 /** Notes created in this session; if left empty they are discarded on leave. */
 const freshNotes = new Set<string>()
+
+/** An undoable change to files and folders (not to note text). */
+interface FileOperation {
+  undo(): Promise<void>
+  redo(): Promise<void>
+}
+const fileUndoStack: FileOperation[] = []
+const fileRedoStack: FileOperation[] = []
+const MAX_FILE_UNDO = 100
+
+function recordFileOperation(operation: FileOperation): void {
+  fileUndoStack.push(operation)
+  if (fileUndoStack.length > MAX_FILE_UNDO) fileUndoStack.shift()
+  fileRedoStack.length = 0
+}
 
 const ROOT: Selection = { kind: 'folder', path: '' }
 
@@ -82,6 +108,17 @@ export const useNotes = create<NotesState>()((set, get) => {
     } catch (error) {
       get().showError(error)
       return undefined
+    }
+  }
+
+  /** Runs `task`, reporting errors to the user. Returns whether it succeeded. */
+  async function succeeds(task: () => Promise<unknown>): Promise<boolean> {
+    try {
+      await task()
+      return true
+    } catch (error) {
+      get().showError(error)
+      return false
     }
   }
 
@@ -118,6 +155,48 @@ export const useNotes = create<NotesState>()((set, get) => {
     const list = visibleNotes(get())
     const index = list.findIndex((n) => n.id === id)
     return (list[index + 1] ?? list[index - 1])?.id ?? null
+  }
+
+  /** Moves a note to Recently Deleted (or erases it there). Returns false on failure. */
+  async function removeNote(id: string): Promise<boolean> {
+    await save(id)
+    const next = neighbourOf(id)
+    freshNotes.delete(id)
+    if (!(await succeeds(() => api.deleteNote(id)))) return false
+    if (get().selectedNoteId === id) set({ selectedNoteId: next })
+    await get().reload()
+    return true
+  }
+
+  async function relocateNote(id: string, folder: FolderPath): Promise<boolean> {
+    await save(id)
+    const next = neighbourOf(id)
+    if (!(await attempt(() => api.moveNote(id, folder)))) return false
+    if (get().selectedNoteId === id && !get().search) set({ selectedNoteId: next })
+    await get().reload()
+    return true
+  }
+
+  /** Renames a folder and keeps the selection inside it. Returns the new path. */
+  async function renameFolderOnDisk(path: FolderPath, name: string): Promise<FolderPath | undefined> {
+    await get().flushSaves()
+    const folder = await attempt(() => api.renameFolder(path, name))
+    if (!folder) return undefined
+    const { selection } = get()
+    if (selection.kind === 'folder' && (selection.path === path || selection.path.startsWith(path + '/'))) {
+      set({ selection: { kind: 'folder', path: folder.path + selection.path.slice(path.length) } })
+    }
+    await get().reload()
+    return folder.path
+  }
+
+  /** After an undo, show the restored note where it now lives. */
+  async function reveal(id: string): Promise<void> {
+    await get().reload()
+    const note = get().library?.notes.find((n) => n.id === id)
+    if (!note) return
+    if (!get().search) set({ selection: { kind: 'folder', path: note.folder } })
+    set({ selectedNoteId: id })
   }
 
   return {
@@ -191,7 +270,8 @@ export const useNotes = create<NotesState>()((set, get) => {
       if (!list.some((n) => n.id === get().selectedNoteId)) set({ selectedNoteId: list[0]?.id ?? null })
     },
 
-    setFocusedPane: (focusedPane) => set((s) => ({ focusedPane, focusTick: s.focusTick + 1 })),
+    focusPane: (focusedPane) => set((s) => ({ focusedPane, focusTick: s.focusTick + 1 })),
+    paneFocused: (focusedPane) => get().focusedPane !== focusedPane && set({ focusedPane }),
     setEditingFolder: (editingFolder) => set({ editingFolder }),
     consumeStartInsert: () => set({ startInsertFor: null }),
     showError: (error) => set({ error: error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(error) }),
@@ -244,33 +324,45 @@ export const useNotes = create<NotesState>()((set, get) => {
     async deleteNote(id) {
       const note = findNote(get().library, id)
       if (!note) return
-      await save(id)
-      const next = neighbourOf(id)
-      freshNotes.delete(id)
-      try {
-        await api.deleteNote(id)
-      } catch (error) {
-        return get().showError(error)
-      }
-      if (get().selectedNoteId === id) set({ selectedNoteId: next })
-      await get().reload()
+      // Erasing from Recently Deleted is permanent (the user confirmed it).
+      if (note.deletedAt !== undefined) return void (await removeNote(id))
+      if (!(await removeNote(id))) return
+      const wasPinned = note.pinned
+      recordFileOperation({
+        undo: async () => {
+          await api.recoverNote(id)
+          if (wasPinned) await api.setPinned(id, true)
+          await reveal(id)
+        },
+        redo: async () => void (await removeNote(id))
+      })
     },
 
     async togglePin(id) {
       const note = findNote(get().library, id)
       if (!note || note.deletedAt) return
-      await save(id)
-      const updated = await attempt(() => api.setPinned(id, !note.pinned))
-      if (updated) set({ library: replaceNote(get().library!, { ...updated, content: findNote(get().library, id)!.content }) })
+      const flip = async (): Promise<void> => {
+        await save(id)
+        const current = findNote(get().library, id)
+        if (!current) return
+        const updated = await api.setPinned(id, !current.pinned)
+        set({ library: replaceNote(get().library!, { ...updated, content: current.content }) })
+      }
+      if (!(await succeeds(flip))) return
+      recordFileOperation({ undo: flip, redo: flip })
     },
 
     async moveNote(id, folder) {
-      await save(id)
-      const next = neighbourOf(id)
-      const moved = await attempt(() => api.moveNote(id, folder))
-      if (!moved) return
-      if (get().selectedNoteId === id && !get().search) set({ selectedNoteId: next })
-      await get().reload()
+      const from = findNote(get().library, id)?.folder
+      if (from === undefined || from === folder) return
+      if (!(await relocateNote(id, folder))) return
+      recordFileOperation({
+        undo: async () => {
+          await api.moveNote(id, from)
+          await reveal(id)
+        },
+        redo: async () => void (await relocateNote(id, folder))
+      })
     },
 
     async recoverNote(id) {
@@ -279,6 +371,50 @@ export const useNotes = create<NotesState>()((set, get) => {
       if (!recovered) return
       if (get().selectedNoteId === id) set({ selectedNoteId: next })
       await get().reload()
+      recordFileOperation({
+        undo: async () => void (await removeNote(id)),
+        redo: async () => {
+          await api.recoverNote(id)
+          await get().reload()
+        }
+      })
+    },
+
+    async undoFileOperation() {
+      const operation = fileUndoStack.pop()
+      if (!operation) return
+      if (!(await succeeds(operation.undo))) return
+      fileRedoStack.push(operation)
+      await get().reload()
+    },
+
+    async redoFileOperation() {
+      const operation = fileRedoStack.pop()
+      if (!operation) return
+      if (!(await succeeds(operation.redo))) return
+      fileUndoStack.push(operation)
+      await get().reload()
+    },
+
+    focusExplorer() {
+      const { focusedPane, settings } = get()
+      if (!settings) return
+      const target: Pane = focusedPane === 'list' ? 'sidebar' : 'list'
+      const patch: Partial<Settings> = {}
+      if (!settings.listVisible) patch.listVisible = true
+      if (target === 'sidebar' && !settings.sidebarVisible) patch.sidebarVisible = true
+      if (Object.keys(patch).length) void get().updateSettings(patch)
+      get().focusPane(target)
+    },
+
+    toggleList() {
+      const { settings, focusedPane } = get()
+      if (!settings) return
+      // In gallery view the notes are the main content, so only the folders hide.
+      if (settings.viewMode === 'gallery') return void get().updateSettings({ sidebarVisible: !settings.sidebarVisible })
+      const listVisible = !settings.listVisible
+      void get().updateSettings({ listVisible })
+      if (!listVisible && focusedPane !== 'editor') get().focusPane('editor')
     },
 
     async createFolder() {
@@ -291,15 +427,15 @@ export const useNotes = create<NotesState>()((set, get) => {
 
     async renameFolder(path, name) {
       set({ editingFolder: null })
-      if (!name.trim() || name === path.split('/').pop()) return
-      await get().flushSaves()
-      const folder = await attempt(() => api.renameFolder(path, name))
-      if (!folder) return
-      const { selection } = get()
-      if (selection.kind === 'folder' && (selection.path === path || selection.path.startsWith(path + '/'))) {
-        set({ selection: { kind: 'folder', path: folder.path + selection.path.slice(path.length) } })
-      }
-      await get().reload()
+      const oldName = path.split('/').pop()!
+      if (!name.trim() || name === oldName) return
+      const renamed = await renameFolderOnDisk(path, name)
+      if (!renamed) return
+      let current = renamed
+      recordFileOperation({
+        undo: async () => void (current = (await renameFolderOnDisk(current, oldName)) ?? current),
+        redo: async () => void (current = (await renameFolderOnDisk(current, name)) ?? current)
+      })
     },
 
     async deleteFolder(path) {

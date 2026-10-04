@@ -1,24 +1,29 @@
 import { useEffect } from 'react'
-import { indentLess, indentMore, moveLineDown, moveLineUp, redo, undo, deleteLineBoundaryBackward } from '@codemirror/commands'
+import { deleteLineBoundaryBackward, indentLess, indentMore, moveLineDown, moveLineUp } from '@codemirror/commands'
 import { findNext, findPrevious, openSearchPanel } from '@codemirror/search'
 import type { EditorView } from '@codemirror/view'
 import type { MenuCommand } from '@shared/types'
 import { editorHandle } from '@/components/editor/editor-handle'
 import { toggleChecked, toggleList } from '@/components/editor/text-commands'
-import { SEARCH_INPUT_ID } from '@/components/NotesWindow'
-import { deleteNoteWithConfirm, printNote } from '@/lib/actions'
+import { nativeRedo, nativeUndo } from '@/components/editor/vim-undo'
+import { deleteNoteWithConfirm, focusSearch, printNote } from '@/lib/actions'
 import { findNote, useNotes } from '@/store/notes-store'
 
 const MIN_FONT = 10
 const MAX_FONT = 32
 const DEFAULT_FONT = 15
 
+function isTextField(element: Element | null): boolean {
+  return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
+}
+
 /** Runs a CodeMirror command against the editor, if a note is open. */
 function inEditor(command: (view: EditorView) => boolean): void {
   const view = editorHandle.view
   if (view && useNotes.getState().selectedNoteId) {
     command(view)
-    view.focus()
+    // Keep focus inside the editor (including its find bar), but bring it back if it was elsewhere.
+    if (!view.dom.contains(document.activeElement)) view.focus()
   }
 }
 
@@ -49,14 +54,17 @@ export function useMenuCommands(openSettings: () => void): void {
         case 'print':
           return note && printNote(note.content)
         case 'undo':
-          if (editorHandle.hasFocus()) return inEditor(undo)
-          return void document.execCommand('undo')
+          if (editorHandle.hasFocus()) return inEditor(nativeUndo)
+          if (isTextField(document.activeElement)) return void document.execCommand('undo')
+          // In the notes list or folders, ⌘Z undoes file operations (like VS Code's explorer).
+          return void state.undoFileOperation()
         case 'redo':
-          if (editorHandle.hasFocus()) return inEditor(redo)
-          return void document.execCommand('redo')
+          if (editorHandle.hasFocus()) return inEditor(nativeRedo)
+          if (isTextField(document.activeElement)) return void document.execCommand('redo')
+          return void state.redoFileOperation()
 
         case 'search':
-          return document.getElementById(SEARCH_INPUT_ID)?.focus()
+          return focusSearch()
         case 'find':
           return inEditor(openSearchPanel)
         case 'find-next':
@@ -90,6 +98,10 @@ export function useMenuCommands(openSettings: () => void): void {
         case 'font-reset':
           return font(DEFAULT_FONT)
 
+        case 'focus-explorer':
+          return state.focusExplorer()
+        case 'toggle-list':
+          return state.toggleList()
         case 'toggle-sidebar':
           return void state.updateSettings({ sidebarVisible: !settings.sidebarVisible })
         case 'view-list':
@@ -118,9 +130,13 @@ export function useMenuCommands(openSettings: () => void): void {
     () =>
       useNotes.subscribe((state) => {
         if (!state.settings) return
-        const { sortBy, groupByDate, viewMode, vimEnabled, sidebarVisible, showNoteCount } = state.settings
+        const { sortBy, groupByDate, viewMode, vimEnabled, sidebarVisible, listVisible, showNoteCount } = state.settings
         const note = findNote(state.library, state.selectedNoteId)
-        const next = { sortBy, groupByDate, viewMode, vimEnabled, sidebarVisible, showNoteCount, hasNote: !!note, notePinned: !!note?.pinned }
+        const next = {
+          ...{ sortBy, groupByDate, viewMode, vimEnabled, sidebarVisible, listVisible, showNoteCount },
+          hasNote: !!note,
+          notePinned: !!note?.pinned
+        }
         const key = JSON.stringify(next)
         if (key === lastMenuState) return
         lastMenuState = key

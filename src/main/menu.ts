@@ -7,6 +7,7 @@ let state: MenuState = {
   viewMode: DEFAULT_SETTINGS.viewMode,
   vimEnabled: DEFAULT_SETTINGS.vimEnabled,
   sidebarVisible: DEFAULT_SETTINGS.sidebarVisible,
+  listVisible: DEFAULT_SETTINGS.listVisible,
   showNoteCount: DEFAULT_SETTINGS.showNoteCount,
   hasNote: false,
   notePinned: false
@@ -130,6 +131,9 @@ function template(): MenuItemConstructorOptions[] {
         },
         { type: 'separator' },
         item(state.sidebarVisible ? 'Hide Folders' : 'Show Folders', 'toggle-sidebar', 'Alt+Cmd+S'),
+        // VS Code-style: ⌘B toggles the whole side bar, ⇧⌘E moves focus notes list ⇄ folders.
+        item(state.listVisible ? 'Hide Sidebar' : 'Show Sidebar', 'toggle-list', 'Cmd+B'),
+        item('Focus Notes List / Folders', 'focus-explorer', 'Shift+Cmd+E'),
         check('Show Note Count', 'toggle-note-count', state.showNoteCount),
         { type: 'separator' },
         item('Zoom In', 'font-bigger', 'Shift+Cmd+.'),

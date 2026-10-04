@@ -60,7 +60,7 @@ export function FolderRow({ kind, name, path, depth, count, selected, focused, e
       {...dropProps}
       style={{ paddingLeft: 4 + depth * 16 }}
       className={cn(
-        'flex h-7 items-center gap-1.5 rounded-md pr-2 text-[13px]',
+        'flex h-7 items-center gap-1.5 rounded-md pr-2 text-[13px] transition-colors duration-100',
         selected && (focused ? 'bg-notes-selection text-notes-selection-foreground' : 'bg-notes-selection-inactive'),
         dropping && 'ring-2 ring-notes-accent ring-inset'
       )}

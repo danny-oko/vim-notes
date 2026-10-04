@@ -21,7 +21,7 @@ in another language.
 bun install
 bun run dev          # development with hot reload
 bun run dist         # build "dist/mac-arm64/Vim Notes.app"
-bun run test:e2e     # end-to-end test against a throwaway notes folder
+bun run test:e2e     # end-to-end test against a thowaway notes folder
 ```
 
 ## Apple Notes shortcuts
@@ -33,6 +33,9 @@ bun run test:e2e     # end-to-end test against a throwaway notes folder
 | Duplicate note | `⌘D` |
 | Search all notes / Find in note | `⌥⌘F` / `⌘F`, `⌘G`, `⇧⌘G` |
 | Show/hide folders | `⌥⌘S` |
+| Show/hide folders + notes list (VS Code side bar) | `⌘B` |
+| Focus notes list ⇄ folders (VS Code explorer) | `⇧⌘E` |
+| Undo / redo a note delete, move, pin or folder rename (in the list or folders) | `⌘Z` / `⇧⌘Z` |
 | View as list / gallery | `⌘1` / `⌘2` |
 | Checklist / Mark as checked | `⇧⌘L` / `⇧⌘U` |
 | Bulleted / Dashed / Numbered list | `⇧⌘7` / `⇧⌘8` / `⇧⌘9` |
@@ -42,9 +45,28 @@ bun run test:e2e     # end-to-end test against a throwaway notes folder
 | Settings | `⌘,` |
 | Toggle Vim mode | `⌃⌘V` |
 
-Notes list and sidebar: `↑↓` or `j`/`k` to move, `Enter`/`Tab`/`l` to open the
-note, `h`/`⇧Tab` to go back, `Delete` to delete. In the editor, `:w` saves now,
-`:q` returns to the list, `:new` creates a note.
+### Vim everywhere
+
+**Notes list and folders** (keys work by physical position, so any keyboard layout works):
+
+| Keys | Action |
+| --- | --- |
+| `j` / `k`, `↓` / `↑`, `⌃n` / `⌃p` | next / previous (counts work: `5j`) |
+| `gg` / `G` | first / last |
+| `⌃d` / `⌃u` | half a page down / up |
+| `l`, `o`, `Enter`, `Tab` | open the note (or go from folders to notes) |
+| `h`, `⇧Tab` | go to the folders |
+| `/` | search |
+| `a` | new note (in folders: new folder) |
+| `dd`, `Delete` | delete note (in folders: delete folder) |
+| `r` | rename folder |
+
+**Editor:** full Vim via CodeMirror. Undo works like VSCodeVim: `u` / `⌃r` undo and
+redo a whole Vim change (e.g. everything typed between `i` and `Esc`), while
+`⌘Z` / `⇧⌘Z` step through smaller typing chunks. `:w` saves now, `:q` returns to
+the list, `:new` creates a note.
+
+The app follows the macOS light/dark appearance, including live changes.
 
 ## Layout of the code
 

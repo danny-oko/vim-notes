@@ -37,8 +37,9 @@ writeFileSync(join(userData, 'settings.json'), JSON.stringify({ notesDir }))
 // APP_PATH=… runs against a packaged build instead of `out/`.
 const app = await electron.launch(
   process.env.APP_PATH
-    ? { executablePath: process.env.APP_PATH, args: [`--user-data-dir=${userData}`] }
-    : { args: ['.', `--user-data-dir=${userData}`] }
+    ? { executablePath: process.env.APP_PATH, args: [`--user-data-dir=${userData}`], colorScheme: null }
+    : // colorScheme: null — use the real OS appearance instead of Playwright's forced light mode.
+      { args: ['.', `--user-data-dir=${userData}`], colorScheme: null }
 )
 const page = await app.firstWindow()
 await page.setViewportSize({ width: 1180, height: 760 }).catch(() => {})
@@ -168,16 +169,162 @@ try {
   await page.locator('[aria-label="Back to Gallery"]').click()
   await menu('view-list')
 
-  // ── Settings & dark mode ───────────────────────────────────────────────
+  // ── Right-click menus (regression: used to freeze the window) ───────────
   await page.getByRole('treeitem', { name: /^Notes/ }).click()
+  await page.locator('[role="option"]', { hasText: 'Reading list' }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Pin Note' }).click()
+  await page.waitForTimeout(300)
+  assert.ok(await page.locator('h3', { hasText: 'Pinned' }).locator('..').getByText('Reading list').count(), 'pinned from context menu')
+  await page.getByRole('treeitem', { name: /Work/ }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Rename Folder' }).waitFor()
+  await page.keyboard.press('Escape')
+
+  // ── ⇧⌘E and Vim navigation in the list (Cyrillic layout too) ──────────
+  await page.getByRole('treeitem', { name: /^Notes/ }).click()
+  const listbox = page.getByRole('listbox', { name: 'Notes' })
+  const selectedTitle = () => listbox.locator('[aria-selected="true"] .font-semibold').first().innerText()
+  const titles = await listbox.locator('[role="option"] .font-semibold').allInnerTexts()
+  const focused = () => page.evaluate(() => document.activeElement?.closest('.cm-editor') ? 'editor' : document.activeElement?.getAttribute('aria-label'))
+  await page.locator('[role="option"]', { hasText: titles[0] }).click()
+  await menu('focus-explorer') // list → folders
+  await page.waitForTimeout(150)
+  assert.equal(await focused(), 'Folders', '⇧⌘E from the list focuses the folders')
+  await menu('focus-explorer') // folders → list
+  await page.waitForTimeout(150)
+  assert.equal(await focused(), 'Notes', '⇧⌘E again focuses the notes list')
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(150)
+  assert.equal(await focused(), 'editor', 'Enter opens the note')
+  await menu('focus-explorer') // editor → list
+  await page.waitForTimeout(150)
+  assert.equal(await focused(), 'Notes', '⇧⌘E from the editor focuses the notes list')
+  await page.keyboard.press('j')
+  assert.equal(await selectedTitle(), titles[1], 'j moves down')
+  await foreignKey('о', 'KeyJ') // j on a Cyrillic layout
+  assert.equal(await selectedTitle(), titles[2], 'j works on a Cyrillic layout')
+  await page.keyboard.press('k')
+  assert.equal(await selectedTitle(), titles[1], 'k moves up')
+  await page.keyboard.press('Shift+G')
+  assert.equal(await selectedTitle(), titles.at(-1), 'G jumps to the last note')
+  await page.keyboard.type('gg')
+  assert.equal(await selectedTitle(), titles[0], 'gg jumps to the first note')
+  await page.keyboard.type('2j')
+  assert.equal(await selectedTitle(), titles[2], 'counts work (2j)')
+  await page.keyboard.press('h')
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Folders', 'h goes to the sidebar')
+  await page.keyboard.press('j')
+  assert.ok(await page.getByRole('treeitem', { name: /Ideas/ }).getAttribute('aria-selected'), 'j moves in the sidebar')
+  await page.keyboard.press('k')
+  await page.keyboard.press('l')
+  await page.keyboard.press('l') // open the note
+  await page.waitForTimeout(150)
+  assert.ok(await page.evaluate(() => !!document.activeElement?.closest('.cm-editor')), 'l opens the note in the editor')
+
+  // ── Undo like VSCodeVim: `u` = whole change, ⌘Z = typing chunk ─────────
+  await menu('new-note')
+  await page.waitForTimeout(400)
+  await page.keyboard.type('Undo test')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('o')
+  await page.keyboard.type('first ')
+  await page.waitForTimeout(700) // pause → separate chunk for ⌘Z
+  await page.keyboard.type('second')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('u')
+  assert.equal(await editorText(), 'Undo test', '`u` undoes the whole insert session')
+  await page.keyboard.press('Control+r')
+  assert.equal(await editorText(), 'Undo test\nfirst second', '⌃r redoes it')
+  await menu('undo')
+  await page.waitForTimeout(50)
+  assert.equal(await editorText(), 'Undo test\nfirst ', '⌘Z undoes only the last typing chunk')
+  await menu('redo')
+  await page.keyboard.type('$xx')
+  assert.equal(await editorText(), 'Undo test\nfirst seco')
+  await page.keyboard.press('u')
+  assert.equal(await editorText(), 'Undo test\nfirst secon', '`u` after `xx` restores one character')
+
+  // ── Find bar ───────────────────────────────────────────────────────────
+  await menu('find')
+  await page.locator('.find-bar-input:focus').waitFor()
+  await page.keyboard.type('o')
+  await page.waitForTimeout(100)
+  assert.match(await page.locator('.find-bar-status').innerText(), /^\d+ of \d+$/, 'find bar shows match count')
+  await shot('08a-find-bar')
+  await page.keyboard.press('Escape')
+
+  // ── ⌘Z in the notes list undoes deleting a note (like VS Code's explorer) ─
+  await page.getByRole('treeitem', { name: /^Notes/ }).click()
+  await page.locator('[role="option"]', { hasText: 'Undo test' }).click()
+  await page.keyboard.type('dd')
+  await page.waitForTimeout(400)
+  assert.ok(!files().some((f) => f.startsWith('Undo test')), 'dd in the list deletes the note')
+  await menu('undo')
+  await page.waitForTimeout(400)
+  assert.ok(files().some((f) => f.startsWith('Undo test')), '⌘Z restores the deleted note')
+  assert.equal(await selectedTitle(), 'Undo test', 'restored note is selected')
+  await menu('redo')
+  await page.waitForTimeout(400)
+  assert.ok(!files().some((f) => f.startsWith('Undo test')), '⇧⌘Z deletes it again')
+  await menu('undo')
+  await page.waitForTimeout(400)
+  // Moving to another folder is undoable too.
+  await page.locator('[role="option"]', { hasText: 'Undo test' }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Move to' }).click()
+  await page.getByRole('menuitem', { name: 'Ideas' }).click()
+  await page.waitForTimeout(400)
+  assert.ok(readdirSync(join(notesDir, 'Ideas')).some((f) => f.startsWith('Undo test')), 'moved to Ideas')
+  await page.getByRole('listbox', { name: 'Notes' }).focus()
+  await menu('undo')
+  await page.waitForTimeout(400)
+  assert.ok(files().some((f) => f.startsWith('Undo test')), '⌘Z moves it back')
+
+  // ── ⌘B hides folders + list together, like VS Code's side bar ──────────
+  const panelWidth = (id) => page.locator(`[data-panel]#${id}`).evaluate((el) => el.getBoundingClientRect().width)
+  await menu('toggle-list')
+  await page.waitForTimeout(400)
+  assert.deepEqual([await panelWidth('sidebar'), await panelWidth('list')], [0, 0], '⌘B hides folders and notes')
+  assert.equal(await focused(), 'editor', 'focus moves to the editor')
+  await shot('08c-sidebars-hidden')
+  await menu('focus-explorer') // ⇧⌘E reveals them again
+  await page.waitForTimeout(400)
+  assert.ok((await panelWidth('list')) > 200 && (await panelWidth('sidebar')) > 150, '⇧⌘E shows them again')
+  assert.equal(await focused(), 'Notes')
+
+  // ── Sidebar slides closed and open ─────────────────────────────────────
+  const sidebarWidth = () => page.locator('[data-panel]').first().evaluate((el) => el.getBoundingClientRect().width)
+  await menu('toggle-sidebar')
+  await page.waitForTimeout(400)
+  assert.equal(await sidebarWidth(), 0, 'sidebar hidden')
+  await shot('08b-sidebar-hidden')
+  await menu('toggle-sidebar')
+  await page.waitForTimeout(400)
+  assert.ok((await sidebarWidth()) > 150, 'sidebar shown again')
+
+  // ── Settings, and live light/dark switching from the OS ────────────────
+  const setTheme = (theme) => app.evaluate(({ nativeTheme }, t) => (nativeTheme.themeSource = t), theme)
+  const appearance = () =>
+    page.evaluate(() => ({
+      dark: matchMedia('(prefers-color-scheme: dark)').matches,
+      background: getComputedStyle(document.querySelector('.note-editor')).backgroundColor
+    }))
+  await page.getByRole('treeitem', { name: /^Notes/ }).click()
+  await page.locator('[role="option"]', { hasText: 'Groceries' }).click()
+  await setTheme('light')
+  await page.waitForTimeout(200)
+  assert.deepEqual(await appearance(), { dark: false, background: 'rgb(255, 255, 255)' }, 'light appearance')
   await menu('settings')
   await page.waitForTimeout(300)
   await shot('08-settings')
   await page.keyboard.press('Escape')
-  await page.emulateMedia({ colorScheme: 'dark' })
-  await page.locator('[role="option"]', { hasText: 'Groceries' }).click()
+  await setTheme('dark')
   await page.waitForTimeout(200)
+  assert.deepEqual(await appearance(), { dark: true, background: 'rgb(30, 30, 30)' }, 'dark appearance follows the OS')
   await shot('09-dark')
+  await menu('find')
+  await page.waitForTimeout(150)
+  await shot('09a-dark-find')
+  await page.keyboard.press('Escape')
+  await setTheme('system')
 
   console.log('✔ all checks passed')
 } catch (error) {

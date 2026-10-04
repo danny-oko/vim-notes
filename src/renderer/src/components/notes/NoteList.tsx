@@ -4,7 +4,8 @@ import { notePreview, noteTitle } from '@shared/note-text'
 import type { Note } from '@shared/types'
 import { Highlight } from '@/components/Highlight'
 import { NOTE_DRAG_TYPE } from '@/components/sidebar/FolderRow'
-import { deleteNoteWithConfirm } from '@/lib/actions'
+import { useVimNav } from '@/hooks/use-vim-nav'
+import { deleteNoteWithConfirm, focusSearch } from '@/lib/actions'
 import { formatListDate } from '@/lib/dates'
 import { flattenSections, notesInView, sectionNotes } from '@/lib/note-order'
 import { cn } from '@/lib/utils'
@@ -12,33 +13,31 @@ import { useNotes } from '@/store/notes-store'
 import { NoteContextMenu } from './NoteContextMenu'
 import { NoteGallery } from './NoteGallery'
 
-/** Handles list navigation keys shared by the list and gallery views. */
-export function useListKeys(notes: Note[], columns = 1) {
+/** Vim/arrow navigation over notes, shared by the list and gallery views. */
+export function useNoteNav(notes: Note[], container: React.RefObject<HTMLElement | null>, columns = 1) {
   const selectedNoteId = useNotes((s) => s.selectedNoteId)
-  const { selectNote, setFocusedPane } = useNotes.getState()
-
-  return (event: React.KeyboardEvent, open: () => void): void => {
-    if (event.target !== event.currentTarget || event.metaKey) return
-    const index = notes.findIndex((n) => n.id === selectedNoteId)
-    const go = (delta: number): void => {
-      const next = notes[Math.min(Math.max(index + delta, 0), notes.length - 1)]
-      if (next) selectNote(next.id)
-    }
-    // Physical key codes so Vim-style j/k/h/l work in any keyboard layout.
-    const { key, code } = event
-    if (key === 'ArrowDown' || code === 'KeyJ') go(columns)
-    else if (key === 'ArrowUp' || code === 'KeyK') go(-columns)
-    else if (columns > 1 && key === 'ArrowRight') go(1)
-    else if (columns > 1 && key === 'ArrowLeft') go(-1)
-    else if (key === 'Home' || (code === 'KeyG' && !event.shiftKey)) go(-notes.length)
-    else if (key === 'End' || (code === 'KeyG' && event.shiftKey)) go(notes.length)
-    else if (key === 'Enter' || key === 'Tab' || code === 'KeyL' || (columns === 1 && key === 'ArrowRight')) open()
-    else if (code === 'KeyH' || (columns === 1 && key === 'ArrowLeft') || (key === 'Tab' && event.shiftKey))
-      setFocusedPane('sidebar')
-    else if ((key === 'Backspace' || key === 'Delete') && selectedNoteId) void deleteNoteWithConfirm(selectedNoteId)
-    else return
-    event.preventDefault()
+  const sidebarVisible = useNotes((s) => s.settings!.sidebarVisible)
+  const { selectNote, focusPane, createNote } = useNotes.getState()
+  const index = notes.findIndex((n) => n.id === selectedNoteId)
+  const select = (i: number): void => {
+    const note = notes[Math.min(Math.max(i, 0), notes.length - 1)]
+    if (note) selectNote(note.id)
   }
+
+  return useVimNav({
+    move: (rows) => select(index + rows * columns),
+    jump: (to) => select(to === 'first' ? 0 : notes.length - 1),
+    halfPage: () => {
+      const row = container.current?.querySelector<HTMLElement>('[role="option"]')?.offsetHeight || 60
+      return Math.max(1, Math.floor((container.current?.clientHeight ?? 0) / row / 2))
+    },
+    sideways: columns > 1 ? (delta) => select(index + delta) : undefined,
+    open: () => selectedNoteId && focusPane('editor'),
+    back: sidebarVisible ? () => focusPane('sidebar') : undefined,
+    search: focusSearch,
+    create: () => void createNote(),
+    remove: () => selectedNoteId && void deleteNoteWithConfirm(selectedNoteId)
+  })
 }
 
 export function NotesPane() {
@@ -64,7 +63,7 @@ function NoteList() {
   const selectedNoteId = useNotes((s) => s.selectedNoteId)
   const focused = useNotes((s) => s.focusedPane === 'list')
   const focusTick = useNotes((s) => s.focusTick)
-  const { selectNote, setFocusedPane } = useNotes.getState()
+  const { selectNote, focusPane, paneFocused } = useNotes.getState()
   const listRef = useRef<HTMLDivElement>(null)
 
   const sections = useMemo(
@@ -72,16 +71,17 @@ function NoteList() {
     [library, selection, search, settings]
   )
   const ordered = useMemo(() => flattenSections(sections), [sections])
-  const onKeyDown = useListKeys(ordered)
+  const onKeyDown = useNoteNav(ordered, listRef)
   const showFolder = !!search.trim()
   const folderName = (path: string): string => (path ? path.split('/').pop()! : 'Notes')
 
   useEffect(() => {
     if (focused && !listRef.current?.contains(document.activeElement)) listRef.current?.focus()
-  }, [focused, focusTick])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTick])
 
   useEffect(() => {
-    listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+    listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [selectedNoteId])
 
   return (
@@ -90,8 +90,8 @@ function NoteList() {
       role="listbox"
       aria-label="Notes"
       tabIndex={0}
-      onFocus={() => setFocusedPane('list')}
-      onKeyDown={(e) => onKeyDown(e, () => setFocusedPane('editor'))}
+      onFocus={() => paneFocused('list')}
+      onKeyDown={onKeyDown}
       className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-4 outline-none"
     >
       {ordered.length === 0 && (
@@ -116,9 +116,9 @@ function NoteList() {
                   draggable={note.deletedAt === undefined}
                   onDragStart={(e) => e.dataTransfer.setData(NOTE_DRAG_TYPE, note.id)}
                   onMouseDown={() => selectNote(note.id)}
-                  onDoubleClick={() => setFocusedPane('editor')}
+                  onDoubleClick={() => focusPane('editor')}
                   className={cn(
-                    'relative rounded-md px-4 py-2.5',
+                    'relative rounded-md px-4 py-2.5 transition-colors duration-100',
                     selected && (focused ? 'bg-notes-selection text-notes-selection-foreground' : 'bg-notes-selection-inactive')
                   )}
                 >

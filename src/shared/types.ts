@@ -45,6 +45,8 @@ export interface Settings {
   fontSize: number
   vimEnabled: boolean
   sidebarVisible: boolean
+  /** Folders + notes list, toggled together with ⌘B like VS Code's side bar. */
+  listVisible: boolean
   showNoteCount: boolean
   viewMode: ViewMode
 }
@@ -58,6 +60,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fontSize: 15,
   vimEnabled: true,
   sidebarVisible: true,
+  listVisible: true,
   showNoteCount: true,
   viewMode: 'list'
 }
@@ -70,6 +73,8 @@ export type MenuCommand =
   | 'delete-note'
   | 'pin-note'
   | 'toggle-sidebar'
+  | 'focus-explorer'
+  | 'toggle-list'
   | 'view-list'
   | 'view-gallery'
   | 'search'
@@ -101,7 +106,7 @@ export type MenuCommand =
 
 export type MenuState = Pick<
   Settings,
-  'sortBy' | 'groupByDate' | 'viewMode' | 'vimEnabled' | 'sidebarVisible' | 'showNoteCount'
+  'sortBy' | 'groupByDate' | 'viewMode' | 'vimEnabled' | 'sidebarVisible' | 'listVisible' | 'showNoteCount'
 > & { hasNote: boolean; notePinned: boolean }
 
 export interface NotesApi {

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
-import { search, searchKeymap } from '@codemirror/search'
-import { Annotation, Compartment, EditorState, type Extension } from '@codemirror/state'
+import { searchKeymap } from '@codemirror/search'
+import { Annotation, Compartment, EditorState, Transaction, type Extension } from '@codemirror/state'
 import { drawSelection, EditorView, keymap } from '@codemirror/view'
 import { getCM, Vim, vim } from '@replit/codemirror-vim'
 import { formatEditorDate } from '@/lib/dates'
@@ -9,7 +9,9 @@ import { findNote, useNotes } from '@/store/notes-store'
 import { Button } from '@/components/ui/button'
 import { checkedItemStyle, titleLineStyle } from './decorations'
 import { editorHandle } from './editor-handle'
+import { findBar } from './find-bar'
 import { installExCommandLayoutFix, vimAnyLayout } from './vim-any-layout'
+import { vimUndo } from './vim-undo'
 
 /** Marks document replacements that come from disk rather than the user. */
 const fromDisk = Annotation.define<boolean>()
@@ -18,14 +20,14 @@ const vimMode = new Compartment()
 const readOnly = new Compartment()
 const titleStyle = new Compartment()
 
-const vimExtension = (enabled: boolean): Extension => (enabled ? [vim({ status: true }), vimAnyLayout()] : [])
+const vimExtension = (enabled: boolean): Extension => (enabled ? [vim({ status: true }), vimAnyLayout(), vimUndo()] : [])
 const readOnlyExtension = (locked: boolean): Extension =>
   locked ? [EditorState.readOnly.of(true), EditorState.changeFilter.of((tr) => !!tr.annotation(fromDisk))] : []
 const titleExtension = (enabled: boolean): Extension => (enabled ? titleLineStyle : [])
 
 // Vim ex commands that make sense for a notes app.
 const notes = () => useNotes.getState()
-const leaveEditor = () => notes().setFocusedPane('list')
+const leaveEditor = () => notes().focusPane('list')
 Vim.defineEx('write', 'w', () => void notes().flushSaves())
 Vim.defineEx('quit', 'q', leaveEditor)
 Vim.defineEx('wq', 'wq', () => void notes().flushSaves().then(leaveEditor))
@@ -56,7 +58,7 @@ export function NoteEditor() {
         history(),
         drawSelection(),
         EditorView.lineWrapping,
-        search({ top: true }),
+        findBar(),
         keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
         readOnly.of(readOnlyExtension(isDeleted)),
         titleStyle.of(titleExtension(settings.firstLineIsTitle)),
@@ -68,7 +70,7 @@ export function NoteEditor() {
           useNotes.getState().editNote(id, update.state.doc.toString())
         }),
         EditorView.domEventHandlers({
-          focus: () => useNotes.getState().setFocusedPane('editor')
+          focus: () => useNotes.getState().paneFocused('editor')
         })
       ]
     })
@@ -123,7 +125,8 @@ export function NoteEditor() {
     if (!note || note.content === view.state.doc.toString()) return
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: note.content },
-      annotations: fromDisk.of(true)
+      // Outside edits aren't something the user can undo here.
+      annotations: [fromDisk.of(true), Transaction.addToHistory.of(false)]
     })
   }, [note?.content])
 

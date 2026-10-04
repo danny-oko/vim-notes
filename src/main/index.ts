@@ -46,8 +46,8 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(() => {
   nativeTheme.themeSource = 'system'
-  const { sortBy, groupByDate, viewMode, vimEnabled, sidebarVisible, showNoteCount } = getSettings()
-  buildMenu({ sortBy, groupByDate, viewMode, vimEnabled, sidebarVisible, showNoteCount })
+  const { sortBy, groupByDate, viewMode, vimEnabled, sidebarVisible, listVisible, showNoteCount } = getSettings()
+  buildMenu({ sortBy, groupByDate, viewMode, vimEnabled, sidebarVisible, listVisible, showNoteCount })
   registerIpc()
   createWindow()
 

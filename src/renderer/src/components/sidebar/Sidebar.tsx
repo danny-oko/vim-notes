@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, CirclePlus, PanelLeft } from 'lucide-react'
 import type { Folder } from '@shared/types'
 import { ToolbarButton } from '@/components/ToolbarButton'
+import { useVimNav } from '@/hooks/use-vim-nav'
+import { deleteFolderWithConfirm, focusSearch } from '@/lib/actions'
 import type { Selection } from '@/lib/note-order'
 import { cn } from '@/lib/utils'
 import { useNotes } from '@/store/notes-store'
@@ -24,7 +26,7 @@ export function Sidebar({ onToggle }: { onToggle: () => void }) {
   const focused = useNotes((s) => s.focusedPane === 'sidebar')
   const showCount = useNotes((s) => s.settings!.showNoteCount)
   const focusTick = useNotes((s) => s.focusTick)
-  const { selectFolder, setFocusedPane, createFolder } = useNotes.getState()
+  const { selectFolder, focusPane, paneFocused, createFolder, setEditingFolder } = useNotes.getState()
   const [collapsed, setCollapsed] = useState(new Set<string>())
   const [sectionOpen, setSectionOpen] = useState(true)
   const listRef = useRef<HTMLDivElement>(null)
@@ -44,7 +46,8 @@ export function Sidebar({ onToggle }: { onToggle: () => void }) {
 
   useEffect(() => {
     if (focused && !listRef.current?.contains(document.activeElement)) listRef.current?.focus()
-  }, [focused, focusTick])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTick])
 
   const toggleCollapsed = (path: string): void =>
     setCollapsed((prev) => {
@@ -54,18 +57,17 @@ export function Sidebar({ onToggle }: { onToggle: () => void }) {
       return next
     })
 
-  const onKeyDown = (event: React.KeyboardEvent): void => {
-    if (event.target !== listRef.current) return
-    const index = items.findIndex((item) => isSameSelection(item, selection))
-    const key = event.key
-    // Arrow keys plus their Vim equivalents, judged by physical key for non-Latin layouts.
-    const code = event.code
-    if (key === 'ArrowDown' || code === 'KeyJ') selectFolder(items[Math.min(index + 1, items.length - 1)])
-    else if (key === 'ArrowUp' || code === 'KeyK') selectFolder(items[Math.max(index - 1, 0)])
-    else if (key === 'ArrowRight' || key === 'Tab' || key === 'Enter' || code === 'KeyL') setFocusedPane('list')
-    else return
-    event.preventDefault()
-  }
+  const index = items.findIndex((item) => isSameSelection(item, selection))
+  const selectedFolder = selection.kind === 'folder' && selection.path ? selection.path : null
+  const onKeyDown = useVimNav({
+    move: (delta) => selectFolder(items[Math.min(Math.max(index + delta, 0), items.length - 1)]),
+    jump: (to) => selectFolder(items[to === 'first' ? 0 : items.length - 1]),
+    open: () => focusPane('list'),
+    search: focusSearch,
+    create: () => void createFolder(),
+    rename: selectedFolder ? () => setEditingFolder(selectedFolder) : undefined,
+    remove: selectedFolder ? () => void deleteFolderWithConfirm(selectedFolder) : undefined
+  })
 
   const hasChildren = (path: string): boolean => library.folders.some((f) => f.path.startsWith(path + '/'))
 
@@ -81,7 +83,7 @@ export function Sidebar({ onToggle }: { onToggle: () => void }) {
         aria-label="Folders"
         tabIndex={0}
         onKeyDown={onKeyDown}
-        onFocus={() => setFocusedPane('sidebar')}
+        onFocus={() => paneFocused('sidebar')}
         className="flex-1 overflow-y-auto px-2.5 pb-2 outline-none"
       >
         <button

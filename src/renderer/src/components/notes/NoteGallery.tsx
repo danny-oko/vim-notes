@@ -6,7 +6,7 @@ import { flattenSections, notesInView, sectionNotes } from '@/lib/note-order'
 import { cn } from '@/lib/utils'
 import { useNotes } from '@/store/notes-store'
 import { NoteContextMenu } from './NoteContextMenu'
-import { useListKeys } from './NoteList'
+import { useNoteNav } from './NoteList'
 
 /** View ▸ as Gallery: notes as thumbnails; opening one shows it full width. */
 export function NoteGallery() {
@@ -17,7 +17,7 @@ export function NoteGallery() {
   const selectedNoteId = useNotes((s) => s.selectedNoteId)
   const focused = useNotes((s) => s.focusedPane === 'list')
   const focusTick = useNotes((s) => s.focusTick)
-  const { selectNote, setFocusedPane } = useNotes.getState()
+  const { selectNote, focusPane, paneFocused } = useNotes.getState()
   const gridRef = useRef<HTMLDivElement>(null)
   const [columns, setColumns] = useState(1)
 
@@ -25,7 +25,7 @@ export function NoteGallery() {
     () => sectionNotes(notesInView(library, selection, search), settings),
     [library, selection, search, settings]
   )
-  const onKeyDown = useListKeys(flattenSections(sections), columns)
+  const onKeyDown = useNoteNav(flattenSections(sections), gridRef, columns)
 
   useEffect(() => {
     const grid = gridRef.current!
@@ -39,7 +39,8 @@ export function NoteGallery() {
 
   useEffect(() => {
     if (focused && !gridRef.current?.contains(document.activeElement)) gridRef.current?.focus()
-  }, [focused, focusTick])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTick])
 
   return (
     <div
@@ -47,8 +48,8 @@ export function NoteGallery() {
       role="listbox"
       aria-label="Notes"
       tabIndex={0}
-      onFocus={() => setFocusedPane('list')}
-      onKeyDown={(e) => onKeyDown(e, () => setFocusedPane('editor'))}
+      onFocus={() => paneFocused('list')}
+      onKeyDown={onKeyDown}
       className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 outline-none"
     >
       {sections.length === 0 && <p className="pt-24 text-center text-[15px] text-muted-foreground">No Notes</p>}
@@ -67,7 +68,7 @@ export function NoteGallery() {
                     draggable={note.deletedAt === undefined}
                     onDragStart={(e) => e.dataTransfer.setData(NOTE_DRAG_TYPE, note.id)}
                     onMouseDown={() => selectNote(note.id)}
-                    onDoubleClick={() => setFocusedPane('editor')}
+                    onDoubleClick={() => focusPane('editor')}
                     className="flex flex-col items-center gap-1.5"
                   >
                     <div

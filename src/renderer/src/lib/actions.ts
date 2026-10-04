@@ -31,6 +31,12 @@ export async function deleteFolderWithConfirm(path: string): Promise<void> {
   if (ok) await useNotes.getState().deleteFolder(path)
 }
 
+export const SEARCH_INPUT_ID = 'notes-search'
+
+export function focusSearch(): void {
+  document.getElementById(SEARCH_INPUT_ID)?.focus()
+}
+
 /** Prints only the note's text, not the whole window. */
 export function printNote(content: string): void {
   const frame = document.createElement('iframe')
