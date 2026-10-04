@@ -35,11 +35,13 @@ for (const [file, content, age] of seed) {
 writeFileSync(join(userData, 'settings.json'), JSON.stringify({ notesDir }))
 
 // APP_PATH=… runs against a packaged build instead of `out/`.
+// The window stays hidden so it can't grab keystrokes meant for other apps.
+const env = { ...process.env, VIM_NOTES_HIDDEN_WINDOW: '1' }
 const app = await electron.launch(
   process.env.APP_PATH
-    ? { executablePath: process.env.APP_PATH, args: [`--user-data-dir=${userData}`], colorScheme: null }
+    ? { executablePath: process.env.APP_PATH, args: [`--user-data-dir=${userData}`], colorScheme: null, env }
     : // colorScheme: null — use the real OS appearance instead of Playwright's forced light mode.
-      { args: ['.', `--user-data-dir=${userData}`], colorScheme: null }
+      { args: ['.', `--user-data-dir=${userData}`], colorScheme: null, env }
 )
 const page = await app.firstWindow()
 await page.setViewportSize({ width: 1180, height: 760 }).catch(() => {})
@@ -189,12 +191,9 @@ try {
   await menu('focus-explorer') // list → folders
   await page.waitForTimeout(150)
   assert.equal(await focused(), 'Folders', '⇧⌘E from the list focuses the folders')
-  await menu('focus-explorer') // folders → list
+  await menu('focus-explorer') // folders → editor
   await page.waitForTimeout(150)
-  assert.equal(await focused(), 'Notes', '⇧⌘E again focuses the notes list')
-  await page.keyboard.press('Enter')
-  await page.waitForTimeout(150)
-  assert.equal(await focused(), 'editor', 'Enter opens the note')
+  assert.equal(await focused(), 'editor', '⇧⌘E from the folders focuses the editor')
   await menu('focus-explorer') // editor → list
   await page.waitForTimeout(150)
   assert.equal(await focused(), 'Notes', '⇧⌘E from the editor focuses the notes list')
@@ -252,6 +251,31 @@ try {
   await shot('08a-find-bar')
   await page.keyboard.press('Escape')
 
+  // ── Enter continues lists; Enter on an empty item ends the list ────────
+  await menu('new-note')
+  await page.waitForTimeout(400)
+  await page.keyboard.type('Lists\n- [ ] milk\nbread\n\nafter\n1. one\ntwo\n\n• dot\nnext')
+  await page.keyboard.press('Escape')
+  assert.equal(
+    await editorText(),
+    'Lists\n- [ ] milk\n- [ ] bread\nafter\n1. one\n2. two\n• dot\n• next',
+    'Enter continues checklists, numbers and bullets'
+  )
+
+  // ── Trimming: files are saved tidy; ⌘S tidies the text on screen ──────
+  await page.keyboard.press('Shift+G')
+  await page.keyboard.press('A')
+  await page.keyboard.type('   \n\n\n')
+  await page.waitForTimeout(800)
+  const listsFile = files().find((f) => f.startsWith('Lists'))
+  assert.equal(readFileSync(join(notesDir, listsFile), 'utf8').endsWith('• next'), true, 'autosave writes without trailing spaces/lines')
+  const lines = () => page.locator('.cm-content .cm-line').allTextContents()
+  assert.deepEqual((await lines()).slice(-3), ['• next   ', '', ''], 'typing is left alone')
+  await page.keyboard.press('Escape')
+  await menu('save')
+  await page.waitForTimeout(200)
+  assert.equal((await lines()).at(-1), '• next', '⌘S tidies the editor')
+
   // ── ⌘Z in the notes list undoes deleting a note (like VS Code's explorer) ─
   await page.getByRole('treeitem', { name: /^Notes/ }).click()
   await page.locator('[role="option"]', { hasText: 'Undo test' }).click()
@@ -289,6 +313,29 @@ try {
   await page.waitForTimeout(400)
   assert.ok((await panelWidth('list')) > 200 && (await panelWidth('sidebar')) > 150, '⇧⌘E shows them again')
   assert.equal(await focused(), 'Notes')
+
+  // ── Panel widths are remembered after hiding/showing and across restarts ─
+  const separator = page.locator('[data-separator]').first()
+  const box = await separator.boundingBox()
+  await page.mouse.move(box.x + box.width / 2, box.y + 300)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 60, box.y + 300, { steps: 8 })
+  await page.mouse.up()
+  await page.waitForTimeout(500)
+  const widened = Math.round(await panelWidth('sidebar'))
+  assert.ok(widened > 250, `sidebar widened by dragging (${widened}px)`)
+  await menu('toggle-sidebar')
+  await page.waitForTimeout(400)
+  await menu('toggle-sidebar')
+  await page.waitForTimeout(400)
+  assert.ok(Math.abs((await panelWidth('sidebar')) - widened) <= 1, 'sidebar reopens at the chosen width')
+  await menu('toggle-list')
+  await page.waitForTimeout(400)
+  await menu('toggle-list')
+  await page.waitForTimeout(400)
+  assert.ok(Math.abs((await panelWidth('sidebar')) - widened) <= 1, '⌘B keeps the chosen width')
+  const savedSettings = JSON.parse(readFileSync(join(userData, 'settings.json'), 'utf8'))
+  assert.ok(Math.abs(savedSettings.sidebarWidth - widened) <= 1, 'width is saved in settings')
 
   // ── Sidebar slides closed and open ─────────────────────────────────────
   const sidebarWidth = () => page.locator('[data-panel]').first().evaluate((el) => el.getBoundingClientRect().width)

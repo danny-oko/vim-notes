@@ -18,3 +18,14 @@ export function notePreview(content: string): string {
   const [, ...rest] = meaningfulLines(content)
   return rest.join(' ').slice(0, 200) || 'No additional text'
 }
+
+/**
+ * Removes what nobody needs in a saved note: spaces at the ends of lines and
+ * blank lines before the first and after the last line of text.
+ */
+export function tidyNote(content: string): string {
+  return content
+    .replace(/[ \t]+$/gm, '')
+    .replace(/^\n+/, '')
+    .replace(/\n+$/, '')
+}

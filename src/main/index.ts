@@ -6,6 +6,9 @@ import { getSettings } from './settings'
 
 app.setName('Vim Notes')
 
+/** Automated tests run the window hidden so it never takes the user's keyboard focus. */
+const hiddenForTests = process.env.VIM_NOTES_HIDDEN_WINDOW === '1'
+
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1100,
@@ -24,11 +27,12 @@ function createWindow(): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
       contextIsolation: true,
-      spellcheck: true
+      spellcheck: true,
+      backgroundThrottling: !hiddenForTests
     }
   })
 
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => !hiddenForTests && win.show())
   // Never navigate away from the app; open external links in the browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)

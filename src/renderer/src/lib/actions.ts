@@ -1,5 +1,7 @@
 import { noteTitle } from '@shared/note-text'
 import { confirm } from '@/components/ConfirmDialog'
+import { editorHandle } from '@/components/editor/editor-handle'
+import { tidyEditor } from '@/components/editor/text-commands'
 import { findNote, useNotes } from '@/store/notes-store'
 
 /**
@@ -29,6 +31,14 @@ export async function deleteFolderWithConfirm(path: string): Promise<void> {
     action: 'Delete Folder'
   })
   if (ok) await useNotes.getState().deleteFolder(path)
+}
+
+/** ⌘S / `:w`: tidy the open note (trailing spaces, blank edge lines) and write now. */
+export async function saveNow(): Promise<void> {
+  const { selectedNoteId, library, flushSaves } = useNotes.getState()
+  const note = findNote(library, selectedNoteId)
+  if (editorHandle.view && note && note.deletedAt === undefined) tidyEditor(editorHandle.view)
+  await flushSaves()
 }
 
 export const SEARCH_INPUT_ID = 'notes-search'

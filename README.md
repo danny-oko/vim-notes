@@ -21,6 +21,7 @@ in another language.
 bun install
 bun run dev          # development with hot reload
 bun run dist         # build "dist/mac-arm64/Vim Notes.app"
+bun run test         # unit tests
 bun run test:e2e     # end-to-end test against a thowaway notes folder
 ```
 
@@ -34,7 +35,8 @@ bun run test:e2e     # end-to-end test against a thowaway notes folder
 | Search all notes / Find in note | `⌥⌘F` / `⌘F`, `⌘G`, `⇧⌘G` |
 | Show/hide folders | `⌥⌘S` |
 | Show/hide folders + notes list (VS Code side bar) | `⌘B` |
-| Focus notes list ⇄ folders (VS Code explorer) | `⇧⌘E` |
+| Cycle focus: editor → notes list → folders | `⇧⌘E` |
+| Save now and tidy the note | `⌘S` |
 | Undo / redo a note delete, move, pin or folder rename (in the list or folders) | `⌘Z` / `⇧⌘Z` |
 | View as list / gallery | `⌘1` / `⌘2` |
 | Checklist / Mark as checked | `⇧⌘L` / `⇧⌘U` |
@@ -66,6 +68,14 @@ redo a whole Vim change (e.g. everything typed between `i` and `Esc`), while
 `⌘Z` / `⇧⌘Z` step through smaller typing chunks. `:w` saves now, `:q` returns to
 the list, `:new` creates a note.
 
+**Lists:** pressing Enter on a `- [ ]`, `•`, `-` or `1.` line continues the list
+(numbers count up); Enter on an empty item ends it.
+
+**Tidy saving:** notes are written without spaces at line ends or blank lines at
+the start/end. The text on screen is tidied on `⌘S` / `:w` and when you leave
+the note, never while you type.
+
+Sidebar and notes-list widths are remembered when hidden and across restarts.
 The app follows the macOS light/dark appearance, including live changes.
 
 ## Layout of the code

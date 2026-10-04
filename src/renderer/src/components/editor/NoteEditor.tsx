@@ -4,10 +4,12 @@ import { searchKeymap } from '@codemirror/search'
 import { Annotation, Compartment, EditorState, Transaction, type Extension } from '@codemirror/state'
 import { drawSelection, EditorView, keymap } from '@codemirror/view'
 import { getCM, Vim, vim } from '@replit/codemirror-vim'
+import { saveNow } from '@/lib/actions'
 import { formatEditorDate } from '@/lib/dates'
 import { findNote, useNotes } from '@/store/notes-store'
 import { Button } from '@/components/ui/button'
 import { checkedItemStyle, titleLineStyle } from './decorations'
+import { continueList, tidyChanges } from './text-commands'
 import { editorHandle } from './editor-handle'
 import { findBar } from './find-bar'
 import { installExCommandLayoutFix, vimAnyLayout } from './vim-any-layout'
@@ -28,10 +30,10 @@ const titleExtension = (enabled: boolean): Extension => (enabled ? titleLineStyl
 // Vim ex commands that make sense for a notes app.
 const notes = () => useNotes.getState()
 const leaveEditor = () => notes().focusPane('list')
-Vim.defineEx('write', 'w', () => void notes().flushSaves())
+Vim.defineEx('write', 'w', () => void saveNow())
 Vim.defineEx('quit', 'q', leaveEditor)
-Vim.defineEx('wq', 'wq', () => void notes().flushSaves().then(leaveEditor))
-Vim.defineEx('xit', 'x', () => void notes().flushSaves().then(leaveEditor))
+Vim.defineEx('wq', 'wq', () => void saveNow().then(leaveEditor))
+Vim.defineEx('xit', 'x', () => void saveNow().then(leaveEditor))
 Vim.defineEx('new', 'new', () => void notes().createNote())
 Vim.defineEx('enew', 'ene', () => void notes().createNote())
 
@@ -59,7 +61,7 @@ export function NoteEditor() {
         drawSelection(),
         EditorView.lineWrapping,
         findBar(),
-        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+        keymap.of([{ key: 'Enter', run: continueList }, ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
         readOnly.of(readOnlyExtension(isDeleted)),
         titleStyle.of(titleExtension(settings.firstLineIsTitle)),
         checkedItemStyle,
@@ -92,7 +94,16 @@ export function NoteEditor() {
   useEffect(() => {
     const view = viewRef.current!
     const previous = noteIdRef.current
-    if (previous) statesRef.current.set(previous, view.state)
+    if (previous) {
+      // Leaving a note tidies its text (undoable when you come back).
+      let state = view.state
+      const changes = tidyChanges(state)
+      if (changes.length) {
+        state = state.update({ changes, userEvent: 'input.tidy' }).state
+        useNotes.getState().editNote(previous, state.doc.toString())
+      }
+      statesRef.current.set(previous, state)
+    }
     noteIdRef.current = note?.id ?? null
     if (!note) return view.setState(createState(''))
 

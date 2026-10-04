@@ -57,6 +57,7 @@ function template(): MenuItemConstructorOptions[] {
         { type: 'separator' },
         item(state.notePinned ? 'Unpin Note' : 'Pin Note', 'pin-note', undefined, noNote),
         item('Duplicate Note', 'duplicate-note', 'Cmd+D', noNote),
+        item('Save', 'save', 'Cmd+S', noNote),
         { type: 'separator' },
         item('Print…', 'print', 'Cmd+P', noNote)
       ]

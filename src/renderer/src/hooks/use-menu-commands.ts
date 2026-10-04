@@ -6,7 +6,7 @@ import type { MenuCommand } from '@shared/types'
 import { editorHandle } from '@/components/editor/editor-handle'
 import { toggleChecked, toggleList } from '@/components/editor/text-commands'
 import { nativeRedo, nativeUndo } from '@/components/editor/vim-undo'
-import { deleteNoteWithConfirm, focusSearch, printNote } from '@/lib/actions'
+import { deleteNoteWithConfirm, focusSearch, printNote, saveNow } from '@/lib/actions'
 import { findNote, useNotes } from '@/store/notes-store'
 
 const MIN_FONT = 10
@@ -41,6 +41,8 @@ export function useMenuCommands(openSettings: () => void): void {
       switch (command) {
         case 'new-note':
           return void state.createNote()
+        case 'save':
+          return void saveNow()
         case 'new-folder':
           return void state.createFolder()
         case 'duplicate-note':

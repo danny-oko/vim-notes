@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { tidyNote } from '@shared/note-text'
 import type { FolderPath, Library, Note, Settings } from '@shared/types'
 import { flattenSections, notesInView, sectionNotes, type Selection } from '@/lib/note-order'
 
@@ -52,7 +53,7 @@ interface NotesState {
   /** ⌘Z / ⇧⌘Z outside the editor: undo/redo note deletes, moves, pins, folder renames. */
   undoFileOperation(): Promise<void>
   redoFileOperation(): Promise<void>
-  /** ⇧⌘E: focus the notes list, or switch between the list and the folders. */
+  /** ⇧⌘E: cycle focus editor → notes list → folders → editor. */
   focusExplorer(): void
   /** ⌘B: show or hide the folders and notes list together. */
   toggleList(): void
@@ -65,6 +66,12 @@ interface NotesState {
 // Unsaved edits live outside React state: they are an I/O concern, not UI.
 const pendingContent = new Map<string, string>()
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+/**
+ * Files are written tidied (see tidyNote) while the editor keeps exactly what
+ * was typed, so a fresh blank line doesn't vanish under the cursor. Remember
+ * both so the disk snapshot isn't mistaken for an outside edit.
+ */
+const lastWritten = new Map<string, { typed: string; onDisk: string }>()
 /** Notes created in this session; if left empty they are discarded on leave. */
 const freshNotes = new Set<string>()
 
@@ -128,13 +135,14 @@ export const useNotes = create<NotesState>()((set, get) => {
     const content = pendingContent.get(id)
     if (content === undefined) return
     pendingContent.delete(id)
-    const saved = await attempt(() => api.saveNote(id, content))
+    const saved = await attempt(() => api.saveNote(id, tidyNote(content)))
     if (!saved) return
+    lastWritten.set(id, { typed: content, onDisk: saved.content })
     const { library } = get()
     if (!library) return
     // Keep newer keystrokes that arrived while the save was in flight.
     const newer = pendingContent.get(id)
-    set({ library: replaceNote(library, newer === undefined ? saved : { ...saved, content: newer }) })
+    set({ library: replaceNote(library, { ...saved, content: newer ?? content }) })
   }
 
   /** Leaving an untouched new note removes it, as in Apple Notes. */
@@ -240,7 +248,8 @@ export const useNotes = create<NotesState>()((set, get) => {
     applyLibrary(incoming) {
       // Local edits that haven't reached the disk yet win over the snapshot.
       const keepLocal = (note: Note): Note => {
-        const local = pendingContent.get(note.id)
+        const written = lastWritten.get(note.id)
+        const local = pendingContent.get(note.id) ?? (written?.onDisk === note.content ? written.typed : undefined)
         return local === undefined ? note : { ...note, content: local }
       }
       const library = { ...incoming, notes: incoming.notes.map(keepLocal) }
@@ -299,6 +308,13 @@ export const useNotes = create<NotesState>()((set, get) => {
       const { library } = get()
       const note = findNote(library, id)
       if (!library || !note || note.deletedAt || note.content === content) return
+      if (tidyNote(content) === tidyNote(note.content)) {
+        // Only trailing spaces or edge blank lines changed: the file stays as it is,
+        // and the note shouldn't jump to the top of the list.
+        if (pendingContent.has(id)) pendingContent.set(id, content)
+        else lastWritten.set(id, { typed: content, onDisk: tidyNote(content) })
+        return set({ library: replaceNote(library, { ...note, content }) })
+      }
       pendingContent.set(id, content)
       if (content.trim()) freshNotes.delete(id)
       set({ library: replaceNote(library, { ...note, content, updatedAt: Date.now() }) })
@@ -397,11 +413,14 @@ export const useNotes = create<NotesState>()((set, get) => {
     },
 
     focusExplorer() {
-      const { focusedPane, settings } = get()
+      const { focusedPane, settings, selectedNoteId } = get()
       if (!settings) return
-      const target: Pane = focusedPane === 'list' ? 'sidebar' : 'list'
+      // Cycle editor → notes list → folders → editor, revealing hidden panels on the way.
+      const order: Pane[] = ['list', 'sidebar', 'editor']
+      let target = order[(order.indexOf(focusedPane) + 1) % order.length]
+      if (target === 'editor' && !selectedNoteId) target = 'list'
       const patch: Partial<Settings> = {}
-      if (!settings.listVisible) patch.listVisible = true
+      if (target !== 'editor' && !settings.listVisible) patch.listVisible = true
       if (target === 'sidebar' && !settings.sidebarVisible) patch.sidebarVisible = true
       if (Object.keys(patch).length) void get().updateSettings(patch)
       get().focusPane(target)

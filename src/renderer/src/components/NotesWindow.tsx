@@ -26,14 +26,19 @@ export function NotesWindow() {
   const listShown = gallery || settings.listVisible
   const sidebarShown = settings.sidebarVisible && listShown
 
-  const sidebar = useAnimatedPanel(sidebarShown, (shown) => {
-    if (listShown) void updateSettings({ sidebarVisible: shown })
+  const sidebar = useAnimatedPanel(sidebarShown, settings.sidebarWidth, {
+    onToggle: (shown) => listShown && void updateSettings({ sidebarVisible: shown }),
+    onWidth: (sidebarWidth) => void updateSettings({ sidebarWidth })
   })
-  const list = useAnimatedPanel(listShown, (shown) => {
-    if (!gallery) void updateSettings({ listVisible: shown })
+  const list = useAnimatedPanel(listShown, settings.listWidth, {
+    onToggle: (shown) => !gallery && void updateSettings({ listVisible: shown }),
+    onWidth: (listWidth) => !gallery && void updateSettings({ listWidth })
   })
   // Fixed after mount: changing a panel's defaultSize later makes the layout re-validate.
-  const [initial] = useState(() => ({ sidebar: sidebarShown ? 220 : 0, list: listShown ? 290 : 0 }))
+  const [initial] = useState(() => ({
+    sidebar: sidebarShown ? settings.sidebarWidth : 0,
+    list: listShown ? settings.listWidth : 0
+  }))
 
   return (
     <ResizablePanelGroup
@@ -89,18 +94,28 @@ export function NotesWindow() {
 }
 
 const PANEL_ANIMATION_MS = 220
+const SAVE_WIDTH_DELAY_MS = 300
+
+interface PanelCallbacks {
+  /** The user dragged the panel closed or open. */
+  onToggle(shown: boolean): void
+  /** The user resized the panel; persisted so it survives hiding and restarts. */
+  onWidth(width: number): void
+}
 
 /**
- * Shows/hides a side panel with a short slide, like Apple Notes. The width
- * transition is only enabled while toggling, so dragging a divider and
- * resizing the window stay immediate. `onUserToggle` reports when the user
- * drags the panel closed or open.
+ * Shows/hides a side panel with a short slide, like Apple Notes, reopening it
+ * at the width the user last chose. The width transition is only enabled while
+ * toggling, so dragging a divider and resizing the window stay immediate.
  */
-function useAnimatedPanel(visible: boolean, onUserToggle: (shown: boolean) => void) {
+function useAnimatedPanel(visible: boolean, width: number, callbacks: PanelCallbacks) {
   const ref = useRef<PanelImperativeHandle | null>(null)
   const [animating, setAnimating] = useState(false)
   // Resize reports during the slide are animation frames, not user drags.
   const animatingRef = useRef(false)
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const latest = useRef({ width, callbacks })
+  latest.current = { width, callbacks }
 
   useEffect(() => {
     const panel = ref.current
@@ -108,7 +123,7 @@ function useAnimatedPanel(visible: boolean, onUserToggle: (shown: boolean) => vo
     animatingRef.current = true
     setAnimating(true)
     // Let the transition class apply before the size changes.
-    const frame = requestAnimationFrame(() => (visible ? panel.expand() : panel.collapse()))
+    const frame = requestAnimationFrame(() => (visible ? panel.resize(latest.current.width) : panel.collapse()))
     const timer = setTimeout(() => {
       animatingRef.current = false
       setAnimating(false)
@@ -120,10 +135,16 @@ function useAnimatedPanel(visible: boolean, onUserToggle: (shown: boolean) => vo
     }
   }, [visible])
 
+  useEffect(() => () => clearTimeout(saveTimer.current), [])
+
   const onResize = (size: { inPixels: number }): void => {
     if (animatingRef.current) return
     const shown = size.inPixels > 0
-    if (shown !== visible) onUserToggle(shown)
+    if (shown !== visible) return latest.current.callbacks.onToggle(shown)
+    const pixels = Math.round(size.inPixels)
+    if (!shown || pixels === latest.current.width) return
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => latest.current.callbacks.onWidth(pixels), SAVE_WIDTH_DELAY_MS)
   }
 
   return { ref, animating, onResize }

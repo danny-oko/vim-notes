@@ -47,6 +47,9 @@ export interface Settings {
   sidebarVisible: boolean
   /** Folders + notes list, toggled together with ⌘B like VS Code's side bar. */
   listVisible: boolean
+  /** Widths in pixels, remembered across hiding/showing and restarts. */
+  sidebarWidth: number
+  listWidth: number
   showNoteCount: boolean
   viewMode: ViewMode
 }
@@ -61,6 +64,8 @@ export const DEFAULT_SETTINGS: Settings = {
   vimEnabled: true,
   sidebarVisible: true,
   listVisible: true,
+  sidebarWidth: 220,
+  listWidth: 290,
   showNoteCount: true,
   viewMode: 'list'
 }
@@ -68,6 +73,7 @@ export const DEFAULT_SETTINGS: Settings = {
 /** Commands sent from the native application menu to the renderer. */
 export type MenuCommand =
   | 'new-note'
+  | 'save'
   | 'new-folder'
   | 'duplicate-note'
   | 'delete-note'
