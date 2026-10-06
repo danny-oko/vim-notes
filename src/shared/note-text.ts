@@ -1,9 +1,21 @@
 const MAX_TITLE_LENGTH = 100
 
+/**
+ * A line as it reads without its Markdown styling: `# Title` → `Title`,
+ * `**bold** and <u>underline</u>` → `bold and underline`. Lists are kept.
+ */
+export function plainLine(line: string): string {
+  return line
+    .replace(/^(\s*)(?:> ?)*(?:#{1,6} +)?/, '$1')
+    .replace(/<\/?u>/gi, '')
+    .replace(/(\*\*|__|~~|==)(?=\S)(.+?)(?<=\S)\1/g, '$2')
+    .replace(/(?<![\w*])([*_`])(?=[^\s*_])(.+?)(?<=[^\s*_])\1(?![\w*])/g, '$2')
+}
+
 function meaningfulLines(content: string): string[] {
   return content
     .split('\n')
-    .map((line) => line.trim())
+    .map((line) => plainLine(line).trim())
     .filter((line) => line.length > 0)
 }
 

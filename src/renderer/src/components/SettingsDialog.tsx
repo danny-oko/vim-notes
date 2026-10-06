@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
+import { restorePaneFocus } from '@/lib/focus-rescue'
 import { useNotes } from '@/store/notes-store'
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -33,7 +34,14 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        // Opened from the menu there's no trigger to return to: go back to the pane.
+        onCloseAutoFocus={(e) => {
+          e.preventDefault()
+          restorePaneFocus()
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="text-[15px]">Settings</DialogTitle>
           <DialogDescription className="text-xs">Notes are stored as plain text files on this Mac.</DialogDescription>

@@ -92,19 +92,37 @@ function template(): MenuItemConstructorOptions[] {
     {
       label: 'Format',
       submenu: [
-        item('Checklist', 'checklist', 'Shift+Cmd+L', noNote),
-        item('Mark as Checked', 'check-item', 'Shift+Cmd+U', noNote),
+        item('Title', 'style-title', 'Shift+Cmd+T', noNote),
+        item('Heading', 'style-heading', 'Shift+Cmd+H', noNote),
+        item('Subheading', 'style-subheading', 'Shift+Cmd+J', noNote),
+        item('Body', 'style-body', 'Shift+Cmd+B', noNote),
+        item('Monostyled', 'style-monostyled', 'Shift+Cmd+M', noNote),
         { type: 'separator' },
         item('Bulleted List', 'bulleted-list', 'Shift+Cmd+7', noNote),
         item('Dashed List', 'dashed-list', 'Shift+Cmd+8', noNote),
         item('Numbered List', 'numbered-list', 'Shift+Cmd+9', noNote),
+        { type: 'separator' },
+        item('Block Quote', 'block-quote', "Cmd+'", noNote),
+        { type: 'separator' },
+        item('Checklist', 'checklist', 'Shift+Cmd+L', noNote),
+        item('Mark as Checked', 'check-item', 'Shift+Cmd+U', noNote),
         { type: 'separator' },
         item('Move List Item Up', 'move-line-up', 'Ctrl+Cmd+Up', noNote),
         item('Move List Item Down', 'move-line-down', 'Ctrl+Cmd+Down', noNote),
         { type: 'separator' },
         {
           label: 'Font',
-          submenu: [item('Bigger', 'font-bigger', 'Cmd+='), item('Smaller', 'font-smaller', 'Cmd+-')]
+          submenu: [
+            // ⌘B belongs to View ▸ Hide Sidebar; with text selected in a note it bolds instead.
+            item('Bold', 'bold', 'Cmd+B', { ...noNote, registerAccelerator: false }),
+            item('Italic', 'italic', 'Cmd+I', noNote),
+            item('Underline', 'underline', 'Cmd+U', noNote),
+            item('Strikethrough', 'strikethrough', 'Shift+Cmd+X', noNote),
+            item('Highlight', 'highlight', undefined, noNote),
+            { type: 'separator' },
+            item('Bigger', 'font-bigger', 'Cmd+='),
+            item('Smaller', 'font-smaller', 'Cmd+-')
+          ]
         },
         {
           label: 'Indentation',

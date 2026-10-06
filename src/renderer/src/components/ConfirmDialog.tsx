@@ -9,6 +9,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
+import { restorePaneFocus } from '@/lib/focus-rescue'
 
 interface ConfirmRequest {
   title: string
@@ -33,7 +34,13 @@ export function ConfirmDialog() {
 
   return (
     <AlertDialog open={!!request} onOpenChange={(open) => !open && close(false)}>
-      <AlertDialogContent size="sm">
+      <AlertDialogContent
+        size="sm"
+        onCloseAutoFocus={(e) => {
+          e.preventDefault()
+          restorePaneFocus()
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle className="text-[13px]">{request?.title}</AlertDialogTitle>
           <AlertDialogDescription className="text-xs">{request?.description}</AlertDialogDescription>

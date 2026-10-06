@@ -80,6 +80,7 @@ export function Sidebar({ onToggle }: { onToggle: () => void }) {
       <div
         ref={listRef}
         role="tree"
+        data-pane="sidebar"
         aria-label="Folders"
         tabIndex={0}
         onKeyDown={onKeyDown}

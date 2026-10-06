@@ -42,12 +42,43 @@ function isForeignKey(event: KeyboardEvent): boolean {
   return event.key.length === 1 && event.key.charCodeAt(0) > 127
 }
 
+/**
+ * Whether the active layout is non-Latin. Such layouts often type *ASCII*
+ * symbols on the number row (Mongolian: 5 → `:`, 6 → `.`, 0 → `?`; Russian:
+ * ⇧6 → `:`), which Vim would take as commands. Letter keys tell us the layout
+ * as the user types; the Keyboard API covers the time before the first letter.
+ */
+let foreignLayout = false
+
+function trackLayout(event: KeyboardEvent): void {
+  if (event.metaKey || event.ctrlKey || event.altKey || !/^Key[A-Z]$/.test(event.code)) return
+  if (event.key === 'Dead') return
+  foreignLayout = isForeignKey(event)
+}
+
+interface KeyboardLayoutApi {
+  getLayoutMap(): Promise<Map<string, string>>
+}
+
+function refreshLayout(): void {
+  const keyboard = (navigator as Navigator & { keyboard?: KeyboardLayoutApi }).keyboard
+  keyboard
+    ?.getLayoutMap()
+    .then((map) => {
+      const j = map.get('KeyJ')
+      if (j) foreignLayout = j.charCodeAt(0) > 127
+    })
+    .catch(() => {})
+}
+
 /** The character the same physical key would type on a US keyboard, if it differs. */
 export function latinKeyFor(event: KeyboardEvent): string | null {
   // Option+key on macOS deliberately types symbols (å, ß…); leave those alone.
-  if (event.metaKey || event.altKey || !isForeignKey(event)) return null
+  if (event.metaKey || event.altKey) return null
   const pair = US_QWERTY[event.code]
-  return pair ? pair[event.shiftKey ? 1 : 0] : null
+  if (!pair || (!foreignLayout && !isForeignKey(event))) return null
+  const key = pair[event.shiftKey ? 1 : 0]
+  return key === event.key ? null : key
 }
 
 /**
@@ -127,7 +158,9 @@ export function vimAnyLayout(): Extension {
  * `:w`, `:q`, `:s/…` work, but keep `/` and `?` searches in the user's language.
  */
 export function installExCommandLayoutFix(): () => void {
+  // Capture phase: also sees insert-mode typing, which reveals the layout.
   const onKeyDown = (event: KeyboardEvent): void => {
+    trackLayout(event)
     const input = event.target
     if (!(input instanceof HTMLInputElement) || !input.closest('.cm-vim-panel')) return
     if (input.previousSibling?.textContent !== ':') return
@@ -137,6 +170,11 @@ export function installExCommandLayoutFix(): () => void {
     input.setRangeText(key, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, 'end')
     input.dispatchEvent(new Event('input', { bubbles: true }))
   }
+  refreshLayout()
   document.addEventListener('keydown', onKeyDown, true)
-  return () => document.removeEventListener('keydown', onKeyDown, true)
+  window.addEventListener('focus', refreshLayout)
+  return () => {
+    document.removeEventListener('keydown', onKeyDown, true)
+    window.removeEventListener('focus', refreshLayout)
+  }
 }

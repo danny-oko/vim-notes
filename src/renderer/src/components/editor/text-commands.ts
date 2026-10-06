@@ -11,6 +11,7 @@ export type ListStyle = 'checklist' | 'bulleted' | 'dashed' | 'numbered'
 const LIST_PREFIX = /^(\s*)(- \[[ xX]\] |• |- |(\d+)\. )/
 const UNCHECKED = /^(\s*)- \[ \] /
 const CHECKED = /^(\s*)- \[[xX]\] /
+const QUOTE = /^(\s*)(> )/
 
 function prefixFor(style: ListStyle, index: number): string {
   switch (style) {
@@ -78,14 +79,15 @@ export function toggleChecked(view: EditorView): boolean {
 
 /**
  * Enter on a list line continues the list, like Apple Notes: checklists add an
- * unchecked item, numbers count up. Enter on an empty item ends the list.
+ * unchecked item, numbers count up, block quotes stay quoted. Enter on an
+ * empty item ends the list.
  */
 export function continueList(view: EditorView): boolean {
   const { state } = view
   const range = state.selection.main
   if (!range.empty || state.selection.ranges.length > 1) return false
   const line = state.doc.lineAt(range.head)
-  const match = LIST_PREFIX.exec(line.text)
+  const match = LIST_PREFIX.exec(line.text) ?? QUOTE.exec(line.text)
   if (!match || range.head < line.from + match[0].length) return false
 
   if (!line.text.slice(match[0].length).trim()) {

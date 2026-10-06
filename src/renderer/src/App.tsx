@@ -6,6 +6,7 @@ import { SettingsDialog } from '@/components/SettingsDialog'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Welcome } from '@/components/Welcome'
 import { useMenuCommands } from '@/hooks/use-menu-commands'
+import { installFocusRescue } from '@/lib/focus-rescue'
 import { useNotes } from '@/store/notes-store'
 
 export function App() {
@@ -17,6 +18,7 @@ export function App() {
   useEffect(() => {
     void useNotes.getState().init()
   }, [])
+  useEffect(installFocusRescue, [])
   useMenuCommands(openSettings)
 
   if (!settings) return null

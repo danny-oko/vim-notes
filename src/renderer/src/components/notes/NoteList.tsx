@@ -88,6 +88,7 @@ function NoteList() {
     <div
       ref={listRef}
       role="listbox"
+      data-pane="list"
       aria-label="Notes"
       tabIndex={0}
       onFocus={() => paneFocused('list')}

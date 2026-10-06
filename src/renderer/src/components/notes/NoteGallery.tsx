@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { noteTitle } from '@shared/note-text'
+import { noteTitle, plainLine } from '@shared/note-text'
 import { NOTE_DRAG_TYPE } from '@/components/sidebar/FolderRow'
 import { formatListDate } from '@/lib/dates'
 import { flattenSections, notesInView, sectionNotes } from '@/lib/note-order'
@@ -46,6 +46,7 @@ export function NoteGallery() {
     <div
       ref={gridRef}
       role="listbox"
+      data-pane="list"
       aria-label="Notes"
       tabIndex={0}
       onFocus={() => paneFocused('list')}
@@ -59,7 +60,7 @@ export function NoteGallery() {
           <div data-grid className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-4 gap-y-5">
             {section.notes.map((note) => {
               const selected = note.id === selectedNoteId
-              const [title, ...body] = note.content.split('\n')
+              const [title, ...body] = note.content.split('\n').map(plainLine)
               return (
                 <NoteContextMenu key={note.id} note={note}>
                   <div

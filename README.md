@@ -39,6 +39,9 @@ bun run test:e2e     # end-to-end test against a thowaway notes folder
 | Save now and tidy the note | `⌘S` |
 | Undo / redo a note delete, move, pin or folder rename (in the list or folders) | `⌘Z` / `⇧⌘Z` |
 | View as list / gallery | `⌘1` / `⌘2` |
+| Title / Heading / Subheading / Body | `⇧⌘T` / `⇧⌘H` / `⇧⌘J` / `⇧⌘B` |
+| Bold / Italic / Underline / Strikethrough | `⌘B` (with text selected) / `⌘I` / `⌘U` / `⇧⌘X` |
+| Monostyled / Block quote | `⇧⌘M` / `⌘'` |
 | Checklist / Mark as checked | `⇧⌘L` / `⇧⌘U` |
 | Bulleted / Dashed / Numbered list | `⇧⌘7` / `⇧⌘8` / `⇧⌘9` |
 | Move list item up / down | `⌃⌘↑` / `⌃⌘↓` |
@@ -68,8 +71,17 @@ redo a whole Vim change (e.g. everything typed between `i` and `Esc`), while
 `⌘Z` / `⇧⌘Z` step through smaller typing chunks. `:w` saves now, `:q` returns to
 the list, `:new` creates a note.
 
+**Styles:** Format ▸ Title, Heading, Subheading, Body and Font ▸ Bold, Italic,
+Underline, Strikethrough, Highlight are saved as plain Markdown — `# Title`,
+`## Heading`, `### Subheading`, `**bold**`, `*italic*`, `<u>underline</u>`,
+`~~strikethrough~~`, `==highlight==`, `` `monostyled` ``, `> quote` — so files
+stay readable in any editor. The note shows the styled text and hides the
+markup, except on the line you're editing. In Vim, format commands act on the
+visual selection, or on the word under the cursor. `⌘B` bolds when text is
+selected and otherwise hides the side bar. Notes use Montserrat.
+
 **Lists:** pressing Enter on a `- [ ]`, `•`, `-` or `1.` line continues the list
-(numbers count up); Enter on an empty item ends it.
+(numbers count up), and on a `> ` line continues the quote; Enter on an empty item ends it.
 
 **Tidy saving:** notes are written without spaces at line ends or blank lines at
 the start/end. The text on screen is tidied on `⌘S` / `:w` and when you leave

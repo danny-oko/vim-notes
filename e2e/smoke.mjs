@@ -262,6 +262,7 @@ try {
     'Enter continues checklists, numbers and bullets'
   )
 
+  const lines = () => page.locator('.cm-content .cm-line').allTextContents()
   // ── Trimming: files are saved tidy; ⌘S tidies the text on screen ──────
   await page.keyboard.press('Shift+G')
   await page.keyboard.press('A')
@@ -269,12 +270,103 @@ try {
   await page.waitForTimeout(800)
   const listsFile = files().find((f) => f.startsWith('Lists'))
   assert.equal(readFileSync(join(notesDir, listsFile), 'utf8').endsWith('• next'), true, 'autosave writes without trailing spaces/lines')
-  const lines = () => page.locator('.cm-content .cm-line').allTextContents()
   assert.deepEqual((await lines()).slice(-3), ['• next   ', '', ''], 'typing is left alone')
   await page.keyboard.press('Escape')
   await menu('save')
   await page.waitForTimeout(200)
   assert.equal((await lines()).at(-1), '• next', '⌘S tidies the editor')
+
+  // ── Rich text: paragraph and font styles, stored as Markdown ──────────
+  // Menu commands arrive over IPC; let each land before the next keystroke.
+  const format = async (command) => {
+    await menu(command)
+    await page.waitForTimeout(60)
+  }
+  await menu('new-note')
+  await page.waitForTimeout(400)
+  await page.keyboard.type('Trip\nPacking list\nbring warm clothes\nquoted line')
+  await page.keyboard.press('Escape')
+  await page.keyboard.type('gg')
+  await format('style-title')
+  await page.keyboard.press('j')
+  await format('style-heading')
+  await page.keyboard.type('jw')
+  await format('bold') // no selection: the word under the cursor
+  await page.keyboard.type('$viw')
+  await format('toggle-list') // ⌘B with a selection bolds instead of hiding the sidebar
+  await page.keyboard.type('0')
+  await format('italic')
+  await page.keyboard.press('j')
+  await format('block-quote') // the cursor stays on the same letter
+  await page.keyboard.type('viw')
+  await format('underline')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(100)
+  const styled = '# Trip\n## Packing list\n*bring* **warm** **clothes**\n> <u>quoted</u> line'
+  assert.equal(await page.evaluate(() => document.querySelector('.cm-content').cmTile.root.view.state.doc.toString()), styled)
+  assert.ok((await page.locator('[data-panel]#list').evaluate((el) => el.getBoundingClientRect().width)) > 200, '⌘B with a selection keeps the sidebar')
+  await page.keyboard.type('gg')
+  await page.waitForTimeout(100)
+  const rendered = await lines()
+  assert.deepEqual(rendered.slice(1), ['Packing list', 'bring warm clothes', 'quoted line'], `markup is hidden off the cursor line: ${rendered}`)
+  assert.equal(rendered[0], '# Trip', 'markup shows on the cursor line')
+  assert.equal(await page.locator('.cm-h1').count(), 1)
+  assert.equal(await page.locator('.cm-h2').count(), 1)
+  assert.deepEqual(await page.locator('.cm-bold').allInnerTexts(), ['warm', 'clothes'])
+  assert.deepEqual(await page.locator('.cm-italic').allInnerTexts(), ['bring'])
+  assert.deepEqual(await page.locator('.cm-underline').allInnerTexts(), ['quoted'])
+  assert.equal(await page.locator('.cm-quote').count(), 1)
+  const fontWeight = await page.locator('.cm-bold').first().evaluate((el) => getComputedStyle(el).fontWeight)
+  assert.equal(fontWeight, '700')
+  await page.waitForTimeout(800)
+  assert.ok(files().includes('Trip.txt'), `file named without markup: ${files()}`)
+  assert.equal(readFileSync(join(notesDir, 'Trip.txt'), 'utf8'), styled, 'styles are saved as Markdown')
+  assert.ok(await listbox.locator('[role="option"]', { hasText: 'Trip' }).count(), 'list shows the plain title')
+  assert.ok(
+    await page.evaluate(async () => {
+      await document.fonts.ready
+      return getComputedStyle(document.querySelector('.cm-content')).fontFamily.includes('Montserrat') && document.fonts.check('15px "Montserrat Variable"')
+    }),
+    'notes use Montserrat'
+  )
+  await shot('08d-rich-text')
+
+  // ── Regression: Vim keeps working on a Mongolian layout and after dialogs ─
+  const cursorLine = () =>
+    page.evaluate(() => {
+      const view = document.querySelector('.cm-content').cmTile.root.view
+      return view.state.doc.lineAt(view.state.selection.main.head).number
+    })
+  // Keys as typed on the macOS Mongolian-Cyrillic layout: g → г, j → р, and
+  // the number row types symbols (2 → `-`, 5 → `:`) that used to reach Vim as-is.
+  const mongolian = async (...keys) => {
+    for (const [key, code] of keys) await foreignKey(key, code)
+  }
+  await mongolian(['г', 'KeyG'], ['г', 'KeyG'], ['р', 'KeyJ'])
+  assert.equal(await cursorLine(), 2, 'gg and j on a Mongolian layout')
+  await mongolian(['г', 'KeyG'], ['г', 'KeyG'], ['-', 'Digit2'], ['р', 'KeyJ'])
+  assert.equal(await cursorLine(), 3, 'the 2 key is a count, not `-`')
+  await mongolian(['г', 'KeyG'], ['г', 'KeyG'], [':', 'Digit5'], ['р', 'KeyJ'])
+  assert.equal(await page.locator('.cm-vim-panel input').count(), 0, 'the 5 key doesn’t open the : command line')
+  assert.equal(await cursorLine(), 4, '5j works')
+  await menu('settings')
+  await page.waitForTimeout(300)
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+  await page.keyboard.press('k')
+  assert.equal(await cursorLine(), 3, 'Vim keys still reach the note after closing a dialog')
+  // Ending visual mode with a mouse click used to make CodeMirror disable Vim.
+  await page.keyboard.type('vj')
+  await page.locator('.cm-content .cm-line').nth(3).click()
+  await page.keyboard.type('gg')
+  await page.keyboard.press('j')
+  assert.equal(await cursorLine(), 2, 'Vim survives a click during visual mode')
+  await page.keyboard.press('j')
+  assert.equal(await cursorLine(), 3)
+  await page.evaluate(() => document.activeElement.blur())
+  await page.keyboard.press('k')
+  assert.equal(await cursorLine(), 2, 'a key pressed with nothing focused goes back to the note')
+  await page.keyboard.type('gg')
 
   // ── ⌘Z in the notes list undoes deleting a note (like VS Code's explorer) ─
   await page.getByRole('treeitem', { name: /^Notes/ }).click()

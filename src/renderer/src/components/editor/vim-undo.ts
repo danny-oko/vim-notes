@@ -58,23 +58,27 @@ function isInsertMode(view: EditorView): boolean {
 /** Closes the current change once a normal-mode command finishes or insert mode ends. */
 const changeCloser = ViewPlugin.fromClass(
   class {
+    destroyed = false
     constructor(readonly view: EditorView) {
       getCM(view)?.on('vim-mode-change', this.onModeChange)
     }
     onModeChange = (event: { mode: string }): void => {
-      if (event.mode !== 'insert') this.close()
+      // Vim can change mode in the middle of an editor update (e.g. a mouse
+      // click ends visual mode), where dispatching would throw and make
+      // CodeMirror disable the Vim plugin for good. Close right after instead.
+      if (event.mode !== 'insert') queueMicrotask(() => this.close())
     }
     update(update: { docChanged: boolean; view: EditorView }): void {
       if (!update.docChanged || isInsertMode(this.view)) return
       // A normal-mode command dispatches synchronously; close right after it.
-      queueMicrotask(() => {
-        if (!isInsertMode(this.view)) this.close()
-      })
+      queueMicrotask(() => this.close())
     }
     close(): void {
+      if (this.destroyed || isInsertMode(this.view)) return
       if (this.view.state.field(vimUndoState, false)?.open) this.view.dispatch({ effects: endChange.of(null) })
     }
     destroy(): void {
+      this.destroyed = true
       getCM(this.view)?.off('vim-mode-change', this.onModeChange)
     }
   }

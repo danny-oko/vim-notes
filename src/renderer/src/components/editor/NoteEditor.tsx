@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { searchKeymap } from '@codemirror/search'
-import { Annotation, Compartment, EditorState, Transaction, type Extension } from '@codemirror/state'
+import { Annotation, Compartment, EditorState, Prec, Transaction, type Extension } from '@codemirror/state'
 import { drawSelection, EditorView, keymap } from '@codemirror/view'
 import { getCM, Vim, vim } from '@replit/codemirror-vim'
 import { saveNow } from '@/lib/actions'
@@ -9,10 +9,12 @@ import { formatEditorDate } from '@/lib/dates'
 import { findNote, useNotes } from '@/store/notes-store'
 import { Button } from '@/components/ui/button'
 import { checkedItemStyle, titleLineStyle } from './decorations'
+import { richText } from './rich-text'
 import { continueList, tidyChanges } from './text-commands'
 import { editorHandle } from './editor-handle'
 import { findBar } from './find-bar'
 import { installExCommandLayoutFix, vimAnyLayout } from './vim-any-layout'
+import { vimJumpsPerNote } from './vim-jumps'
 import { vimUndo } from './vim-undo'
 
 /** Marks document replacements that come from disk rather than the user. */
@@ -22,10 +24,33 @@ const vimMode = new Compartment()
 const readOnly = new Compartment()
 const titleStyle = new Compartment()
 
-const vimExtension = (enabled: boolean): Extension => (enabled ? [vim({ status: true }), vimAnyLayout(), vimUndo()] : [])
+const vimExtension = (enabled: boolean): Extension =>
+  enabled ? [vim({ status: true }), vimAnyLayout(), vimUndo(), vimJumpsPerNote] : []
 const readOnlyExtension = (locked: boolean): Extension =>
   locked ? [EditorState.readOnly.of(true), EditorState.changeFilter.of((tr) => !!tr.annotation(fromDisk))] : []
 const titleExtension = (enabled: boolean): Extension => (enabled ? titleLineStyle : [])
+
+interface VimKeyHandler {
+  handleKey(event: KeyboardEvent, view: EditorView): boolean | undefined
+}
+
+/**
+ * Safety net: CodeMirror permanently disables a plugin whose update throws,
+ * which would leave Vim dead until the next note switch. If a key arrives
+ * while Vim should be on but isn't running, restart it and let it take the key.
+ */
+const reviveVim = Prec.highest(
+  EditorView.domEventHandlers({
+    keydown(event, view) {
+      if (!useNotes.getState().settings?.vimEnabled || getCM(view)?.state.vim) return false
+      console.warn('Vim stopped responding; restarting it.')
+      view.dispatch({ effects: vimMode.reconfigure([]) })
+      view.dispatch({ effects: vimMode.reconfigure(vimExtension(true)) })
+      const plugin = getCM(view)?.state.vimPlugin as VimKeyHandler | undefined
+      return !!plugin?.handleKey(event, view)
+    }
+  })
+)
 
 // Vim ex commands that make sense for a notes app.
 const notes = () => useNotes.getState()
@@ -56,6 +81,7 @@ export function NoteEditor() {
     EditorState.create({
       doc,
       extensions: [
+        reviveVim,
         vimMode.of(vimExtension(settings.vimEnabled)),
         history(),
         drawSelection(),
@@ -65,6 +91,7 @@ export function NoteEditor() {
         readOnly.of(readOnlyExtension(isDeleted)),
         titleStyle.of(titleExtension(settings.firstLineIsTitle)),
         checkedItemStyle,
+        richText(),
         EditorView.contentAttributes.of({ spellcheck: 'true', autocorrect: 'on', 'aria-label': 'Note' }),
         EditorView.updateListener.of((update) => {
           const id = noteIdRef.current

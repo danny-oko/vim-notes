@@ -17,10 +17,13 @@
   },
   "devDependencies": {
     "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-markdown": "^6.5.2",
     "@codemirror/language": "^6.12.4",
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
+    "@fontsource-variable/montserrat": "^5.3.0",
+    "@lezer/markdown": "^1.7.2",
     "@replit/codemirror-vim": "^6.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.4",

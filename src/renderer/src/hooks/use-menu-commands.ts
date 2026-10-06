@@ -2,8 +2,10 @@ import { useEffect } from 'react'
 import { deleteLineBoundaryBackward, indentLess, indentMore, moveLineDown, moveLineUp } from '@codemirror/commands'
 import { findNext, findPrevious, openSearchPanel } from '@codemirror/search'
 import type { EditorView } from '@codemirror/view'
+import { getCM } from '@replit/codemirror-vim'
 import type { MenuCommand } from '@shared/types'
 import { editorHandle } from '@/components/editor/editor-handle'
+import { setBlockStyle, toggleBlockQuote, toggleInlineStyle } from '@/components/editor/format-commands'
 import { toggleChecked, toggleList } from '@/components/editor/text-commands'
 import { nativeRedo, nativeUndo } from '@/components/editor/vim-undo'
 import { deleteNoteWithConfirm, focusSearch, printNote, saveNow } from '@/lib/actions'
@@ -12,6 +14,13 @@ import { findNote, useNotes } from '@/store/notes-store'
 const MIN_FONT = 10
 const MAX_FONT = 32
 const DEFAULT_FONT = 15
+
+/** Text the user selected: Vim's visual mode, or a mouse/shift selection outside normal mode. */
+function hasTextSelection(view: EditorView): boolean {
+  if (view.state.selection.ranges.every((range) => range.empty)) return false
+  const vim = getCM(view)?.state.vim
+  return !vim || vim.visualMode || vim.insertMode
+}
 
 function isTextField(element: Element | null): boolean {
   return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
@@ -74,6 +83,25 @@ export function useMenuCommands(openSettings: () => void): void {
         case 'find-previous':
           return inEditor(findPrevious)
 
+        case 'style-title':
+          return inEditor((view) => setBlockStyle(view, 'title'))
+        case 'style-heading':
+          return inEditor((view) => setBlockStyle(view, 'heading'))
+        case 'style-subheading':
+          return inEditor((view) => setBlockStyle(view, 'subheading'))
+        case 'style-body':
+          return inEditor((view) => setBlockStyle(view, 'body'))
+        case 'style-monostyled':
+          return inEditor((view) => toggleInlineStyle(view, 'monostyled'))
+        case 'block-quote':
+          return inEditor(toggleBlockQuote)
+        case 'bold':
+        case 'italic':
+        case 'underline':
+        case 'strikethrough':
+        case 'highlight':
+          return inEditor((view) => toggleInlineStyle(view, command))
+
         case 'checklist':
           return inEditor((view) => toggleList(view, 'checklist'))
         case 'check-item':
@@ -103,6 +131,8 @@ export function useMenuCommands(openSettings: () => void): void {
         case 'focus-explorer':
           return state.focusExplorer()
         case 'toggle-list':
+          // ⌘B: bold when text is selected in the note, otherwise hide/show the sidebar.
+          if (editorHandle.hasFocus() && hasTextSelection(editorHandle.view!)) return inEditor((view) => toggleInlineStyle(view, 'bold'))
           return state.toggleList()
         case 'toggle-sidebar':
           return void state.updateSettings({ sidebarVisible: !settings.sidebarVisible })
