@@ -116,6 +116,7 @@ function useAnimatedPanel(visible: boolean, width: number, callbacks: PanelCallb
   const animatingRef = useRef(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const latest = useRef({ width, callbacks })
+  // eslint-disable-next-line react-hooks/refs -- read only by the effect and resize handler
   latest.current = { width, callbacks }
 
   useEffect(() => {

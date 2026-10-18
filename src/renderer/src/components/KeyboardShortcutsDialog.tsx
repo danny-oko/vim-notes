@@ -126,6 +126,7 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: { open: boolean;
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- closing from outside must stop recording too
     if (!open) setRecording(null)
   }, [open])
 

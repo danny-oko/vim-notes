@@ -166,6 +166,7 @@ export function NoteEditor() {
       // Outside edits aren't something the user can undo here.
       annotations: [fromDisk.of(true), Transaction.addToHistory.of(false)]
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note?.content])
 
   // Explicit focus requests (Enter/Tab from the list, double-click…). Changing
@@ -184,6 +185,7 @@ export function NoteEditor() {
     view.focus()
     const cm = getCM(view)
     if (cm && settings.vimEnabled && !cm.state.vim?.insertMode) Vim.handleKey(cm, 'i', 'mapping')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startInsertFor, note?.id])
 
   return (
