@@ -248,6 +248,17 @@
 .note-editor .cm-h4 {
   font-weight: 700;
 }
+/* Format ▸ Divider Line (`---`) */
+.note-editor .cm-divider {
+  position: relative;
+}
+.note-editor .cm-divider::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  border-top: 1px solid var(--border);
+}
 .note-editor .cm-bold {
   font-weight: 700;
 }

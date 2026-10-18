@@ -50,6 +50,8 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(() => {
   nativeTheme.themeSource = 'system'
+  // Packaged builds get the icon from electron-builder; show it in the Dock during development too.
+  if (!app.isPackaged) app.dock?.setIcon(join(app.getAppPath(), 'resources', 'icon.png'))
   const { sortBy, groupByDate, viewMode, vimEnabled, sidebarVisible, listVisible, showNoteCount } = getSettings()
   buildMenu({ sortBy, groupByDate, viewMode, vimEnabled, sidebarVisible, listVisible, showNoteCount })
   registerIpc()

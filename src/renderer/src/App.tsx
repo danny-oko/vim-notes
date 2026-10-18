@@ -1,32 +1,41 @@
 import { useCallback, useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { KeyboardShortcutsDialog } from '@/components/KeyboardShortcutsDialog'
 import { NotesWindow } from '@/components/NotesWindow'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Welcome } from '@/components/Welcome'
 import { useMenuCommands } from '@/hooks/use-menu-commands'
 import { installFocusRescue } from '@/lib/focus-rescue'
+import { initKeybindings } from '@/lib/keybindings'
 import { useNotes } from '@/store/notes-store'
 
 export function App() {
   const settings = useNotes((s) => s.settings)
   const hasLibrary = useNotes((s) => !!s.library)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const openSettings = useCallback(() => setSettingsOpen(true), [])
+  const openShortcuts = useCallback(() => {
+    setSettingsOpen(false)
+    setShortcutsOpen(true)
+  }, [])
 
   useEffect(() => {
     void useNotes.getState().init()
   }, [])
   useEffect(installFocusRescue, [])
-  useMenuCommands(openSettings)
+  useEffect(initKeybindings, [])
+  useMenuCommands({ openSettings, openShortcuts })
 
   if (!settings) return null
 
   return (
     <TooltipProvider delayDuration={600}>
       {settings.notesDir && hasLibrary ? <NotesWindow /> : <Welcome />}
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} onOpenShortcuts={openShortcuts} />
+      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <ConfirmDialog />
       <ErrorToast />
     </TooltipProvider>

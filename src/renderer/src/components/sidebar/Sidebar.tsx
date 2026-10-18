@@ -74,7 +74,7 @@ export function Sidebar({ onToggle }: { onToggle: () => void }) {
   return (
     <aside className="flex h-full flex-col bg-notes-sidebar">
       <div className="drag-region flex h-[52px] shrink-0 items-center pl-[84px]">
-        <ToolbarButton icon={PanelLeft} label="Hide Folders" shortcut="⌥⌘S" onClick={onToggle} />
+        <ToolbarButton icon={PanelLeft} label="Hide Folders" command="toggle-sidebar" onClick={onToggle} />
       </div>
 
       <div

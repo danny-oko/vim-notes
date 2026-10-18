@@ -1,7 +1,7 @@
 {
   "name": "vim-notes",
-  "productName": "Vim Notes",
-  "version": "0.1.0",
+  "productName": "vimo",
+  "version": "1.1.0",
   "description": "A plain-text, Apple Notes–style desktop editor with Vim keybindings that work in any keyboard layout.",
   "main": "./out/main/index.js",
   "private": true,
@@ -54,7 +54,7 @@
   ],
   "build": {
     "appId": "dev.vimnotes.app",
-    "productName": "Vim Notes",
+    "productName": "vimo",
     "directories": {
       "output": "dist",
       "buildResources": "resources"
@@ -72,7 +72,7 @@
       "hardenedRuntime": false
     },
     "dmg": {
-      "title": "Vim Notes"
+      "title": "Vim Notes - Vimo"
     }
   },
   "author": "dnii"

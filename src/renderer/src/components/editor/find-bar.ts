@@ -9,8 +9,15 @@ import {
 } from '@codemirror/search'
 import type { Extension } from '@codemirror/state'
 import type { EditorView, Panel, ViewUpdate } from '@codemirror/view'
+import type { MenuCommand } from '@shared/types'
+import { shortcutLabel } from '@/lib/keybindings'
 
 const MAX_COUNTED_MATCHES = 1000
+
+function withShortcut(label: string, command: MenuCommand): string {
+  const key = shortcutLabel(command)
+  return key ? `${label} (${key})` : label
+}
 
 function element<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -77,8 +84,8 @@ function createFindBar(view: EditorView): Panel {
     'div',
     { className: 'find-bar' },
     input,
-    button('‹', 'Previous (⇧⌘G)', () => findPrevious(view)),
-    button('›', 'Next (⌘G)', () => findNext(view)),
+    button('‹', withShortcut('Previous', 'find-previous'), () => findPrevious(view)),
+    button('›', withShortcut('Next', 'find-next'), () => findNext(view)),
     status,
     button('Done', 'Close (Esc)', () => closeSearchPanel(view))
   )

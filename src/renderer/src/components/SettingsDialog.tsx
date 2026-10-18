@@ -1,4 +1,4 @@
-import { FolderOpen } from 'lucide-react'
+import { Braces, FolderOpen } from 'lucide-react'
 import type { NoteExtension, SortBy } from '@shared/types'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { restorePaneFocus } from '@/lib/focus-rescue'
+import { useShortcut } from '@/lib/keybindings'
 import { useNotes } from '@/store/notes-store'
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -23,8 +24,17 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 }
 
 /** Notes ▸ Settings… (⌘,) */
-export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function SettingsDialog({
+  open,
+  onOpenChange,
+  onOpenShortcuts
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onOpenShortcuts: () => void
+}) {
   const settings = useNotes((s) => s.settings!)
+  const vimKey = useShortcut('toggle-vim')
   const { updateSettings, setNotesDir } = useNotes.getState()
 
   const chooseFolder = async (): Promise<void> => {
@@ -106,8 +116,24 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
           <Separator className="my-1.5" />
 
-          <Row label="Vim mode" hint="Normal-mode keys work in every keyboard layout. ⌃⌘V">
+          <Row label="Vim mode" hint={`Normal-mode keys work in every keyboard layout.${vimKey ? ` ${vimKey}` : ''}`}>
             <Switch checked={settings.vimEnabled} onCheckedChange={(vimEnabled) => void updateSettings({ vimEnabled })} />
+          </Row>
+          <Row label="Keyboard shortcuts" hint="Apple Notes defaults; change them like VS Code's keybindings.json.">
+            <div className="flex gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void window.api.openKeybindingsFile()}
+                aria-label="Open keybindings.json"
+                title="Open keybindings.json"
+              >
+                <Braces />
+              </Button>
+              <Button size="sm" variant="outline" onClick={onOpenShortcuts}>
+                Customize…
+              </Button>
+            </div>
           </Row>
         </div>
       </DialogContent>
