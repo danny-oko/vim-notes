@@ -1,7 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, ShareMenu } from 'electron'
 import { watch, type FSWatcher } from 'node:fs'
 import { join } from 'node:path'
+import type { Keybinding } from '@shared/keybindings'
 import type { FolderPath, MenuState, Settings } from '@shared/types'
+import { getKeybindings, openKeybindingsFile, setUserKeybindings, watchKeybindings } from './keybindings'
 import { NoteLibrary } from './library'
 import { buildMenu } from './menu'
 import { getSettings, updateSettings } from './settings'
@@ -95,4 +97,17 @@ export function registerIpc(): void {
   )
 
   ipcMain.on('menu:sync', (_e, state: MenuState) => buildMenu(state))
+
+  ipcMain.handle('keybindings:get', () => getKeybindings())
+  ipcMain.handle('keybindings:set', (_e, entries: Keybinding[]) => {
+    const state = setUserKeybindings(entries)
+    buildMenu()
+    broadcast('keybindings:changed', state)
+    return state
+  })
+  ipcMain.handle('keybindings:open', () => openKeybindingsFile())
+  watchKeybindings((state) => {
+    buildMenu()
+    broadcast('keybindings:changed', state)
+  })
 }

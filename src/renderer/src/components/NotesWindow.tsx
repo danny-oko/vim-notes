@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PanelImperativeHandle } from 'react-resizable-panels'
+import type { MenuCommand } from '@shared/types'
 import { ChevronLeft, LayoutGrid, List, ListChecks, PanelLeft, Search, Share, SquarePen, Trash2, X } from 'lucide-react'
 import { NoteEditor } from '@/components/editor/NoteEditor'
 import { editorHandle } from '@/components/editor/editor-handle'
@@ -115,6 +116,7 @@ function useAnimatedPanel(visible: boolean, width: number, callbacks: PanelCallb
   const animatingRef = useRef(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const latest = useRef({ width, callbacks })
+  // eslint-disable-next-line react-hooks/refs -- read only by the effect and resize handler
   latest.current = { width, callbacks }
 
   useEffect(() => {
@@ -151,10 +153,10 @@ function useAnimatedPanel(visible: boolean, width: number, callbacks: PanelCallb
 }
 
 /** Re-opens a hidden panel; leaves room for the traffic lights when nothing is on the left. */
-function ShowPanelButton({ label, shortcut, onClick }: { label: string; shortcut: string; onClick: () => void }) {
+function ShowPanelButton({ label, command, onClick }: { label: string; command: MenuCommand; onClick: () => void }) {
   return (
     <div className="flex shrink-0 items-center pl-[72px]">
-      <ToolbarButton icon={PanelLeft} label={label} shortcut={shortcut} onClick={onClick} />
+      <ToolbarButton icon={PanelLeft} label={label} command={command} onClick={onClick} />
     </div>
   )
 }
@@ -180,7 +182,7 @@ function ListToolbar() {
   return (
     <div className="drag-region flex h-[52px] shrink-0 items-center gap-1 pr-2.5">
       {!sidebarVisible && (
-        <ShowPanelButton label="Show Folders" shortcut="⌥⌘S" onClick={() => void updateSettings({ sidebarVisible: true })} />
+        <ShowPanelButton label="Show Folders" command="toggle-sidebar" onClick={() => void updateSettings({ sidebarVisible: true })} />
       )}
       <div className="min-w-0 flex-1 pl-4 leading-tight">
         <div className="truncate text-[13px] font-bold">{title}</div>
@@ -205,13 +207,13 @@ function ListToolbar() {
       <ToolbarButton
         icon={Trash2}
         label="Delete"
-        shortcut="⌘⌫"
+        command="delete-note"
         disabled={!selectedNoteId}
         onClick={() => selectedNoteId && void deleteNoteWithConfirm(selectedNoteId)}
       />
       {viewMode === 'gallery' && (
         <>
-          <ToolbarButton icon={SquarePen} label="New Note" shortcut="⌘N" onClick={() => void useNotes.getState().createNote()} />
+          <ToolbarButton icon={SquarePen} label="New Note" command="new-note" onClick={() => void useNotes.getState().createNote()} />
           <SearchField />
         </>
       )}
@@ -229,20 +231,20 @@ function EditorToolbar() {
 
   return (
     <div className="drag-region flex h-[52px] shrink-0 items-center gap-1 px-2.5">
-      {!gallery && !listVisible && <ShowPanelButton label="Show Sidebar" shortcut="⌘B" onClick={() => useNotes.getState().toggleList()} />}
+      {!gallery && !listVisible && <ShowPanelButton label="Show Sidebar" command="toggle-list" onClick={() => useNotes.getState().toggleList()} />}
       {gallery && (
         <>
           {!sidebarVisible && (
-            <ShowPanelButton label="Show Folders" shortcut="⌥⌘S" onClick={() => void updateSettings({ sidebarVisible: true })} />
+            <ShowPanelButton label="Show Folders" command="toggle-sidebar" onClick={() => void updateSettings({ sidebarVisible: true })} />
           )}
           <ToolbarButton icon={ChevronLeft} label="Back to Gallery" onClick={() => focusPane('list')} />
         </>
       )}
-      <ToolbarButton icon={SquarePen} label="New Note" shortcut="⌘N" onClick={() => void createNote()} />
+      <ToolbarButton icon={SquarePen} label="New Note" command="new-note" onClick={() => void createNote()} />
       <ToolbarButton
         icon={ListChecks}
         label="Checklist"
-        shortcut="⇧⌘L"
+        command="checklist"
         disabled={!editable}
         onClick={() => editorHandle.view && toggleList(editorHandle.view, 'checklist')}
       />

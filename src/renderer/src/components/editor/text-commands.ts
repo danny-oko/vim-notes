@@ -78,6 +78,23 @@ export function toggleChecked(view: EditorView): boolean {
 }
 
 /**
+ * Format ▸ Divider Line (⌘L): a `---` line below the current one, written as a
+ * Markdown thematic break and drawn as a rule. The cursor moves past it.
+ */
+export function insertDivider(view: EditorView): boolean {
+  const line = view.state.doc.lineAt(view.state.selection.main.head)
+  // A blank line becomes the divider; otherwise it goes below the current line.
+  const change = line.text.trim() ? { from: line.to, insert: '\n---\n' } : { from: line.from, to: line.to, insert: '---\n' }
+  view.dispatch({
+    changes: change,
+    selection: { anchor: change.from + change.insert.length },
+    scrollIntoView: true,
+    userEvent: 'input.format'
+  })
+  return true
+}
+
+/**
  * Enter on a list line continues the list, like Apple Notes: checklists add an
  * unchecked item, numbers count up, block quotes stay quoted. Enter on an
  * empty item ends the list.

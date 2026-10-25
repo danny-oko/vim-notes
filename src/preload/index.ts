@@ -31,6 +31,12 @@ const api: NotesApi = {
 
   onLibraryChanged: (listener) => subscribe('library:changed', listener),
   onMenuCommand: (listener) => subscribe<MenuCommand>('menu', listener),
+  onMenuAccelerator: (listener) => subscribe<string>('menu:accelerator', listener),
+
+  getKeybindings: () => ipcRenderer.invoke('keybindings:get'),
+  setUserKeybindings: (entries) => ipcRenderer.invoke('keybindings:set', entries),
+  openKeybindingsFile: () => ipcRenderer.invoke('keybindings:open'),
+  onKeybindingsChanged: (listener) => subscribe('keybindings:changed', listener),
   syncMenuState: (state) => ipcRenderer.send('menu:sync', state)
 }
 

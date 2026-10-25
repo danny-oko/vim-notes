@@ -1,19 +1,23 @@
 import type { LucideIcon } from 'lucide-react'
+import type { MenuCommand } from '@shared/types'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useShortcut } from '@/lib/keybindings'
 import { cn } from '@/lib/utils'
 
 interface ToolbarButtonProps {
   icon: LucideIcon
   label: string
-  shortcut?: string
+  /** Shows this command's shortcut (from keybindings.json) in the tooltip. */
+  command?: MenuCommand
   disabled?: boolean
   className?: string
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void
 }
 
 /** A borderless macOS-style toolbar button with a tooltip. */
-export function ToolbarButton({ icon: Icon, label, shortcut, disabled, className, onClick }: ToolbarButtonProps) {
+export function ToolbarButton({ icon: Icon, label, command, disabled, className, onClick }: ToolbarButtonProps) {
+  const shortcut = useShortcut(command)
   return (
     <Tooltip>
       <TooltipTrigger asChild>

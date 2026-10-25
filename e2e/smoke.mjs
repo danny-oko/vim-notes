@@ -293,7 +293,8 @@ try {
   await page.keyboard.type('jw')
   await format('bold') // no selection: the word under the cursor
   await page.keyboard.type('$viw')
-  await format('toggle-list') // ⌘B with a selection bolds instead of hiding the sidebar
+  await page.keyboard.press('Meta+b') // ⌘B with a selection bolds instead of hiding the sidebar
+  await page.waitForTimeout(60)
   await page.keyboard.type('0')
   await format('italic')
   await page.keyboard.press('j')
@@ -439,7 +440,102 @@ try {
   await page.waitForTimeout(400)
   assert.ok((await sidebarWidth()) > 150, 'sidebar shown again')
 
-  // ── Settings, and live light/dark switching from the OS ────────────────
+  // ── Keyboard shortcuts: Apple Notes keys, any layout, keybindings.json ──
+  const doc = () => page.evaluate(() => document.querySelector('.cm-content').cmTile.root.view.state.doc.toString())
+  const keybindingsFile = join(userData, 'keybindings.json')
+  const accelerator = (label) =>
+    app.evaluate(({ Menu }, label) => {
+      const find = (items) => {
+        for (const item of items) {
+          if (item.label === label) return item.accelerator ?? null
+          const found = item.submenu ? find(item.submenu.items) : undefined
+          if (found !== undefined) return found
+        }
+      }
+      return find(Menu.getApplicationMenu().items)
+    }, label)
+  await page.locator('[role="option"]', { hasText: 'Groceries' }).click()
+  await menu('new-note')
+  await page.waitForTimeout(400)
+  await page.keyboard.type('Keys\nfirst\nsecond')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Meta+Shift+Digit7') // Format ▸ Bulleted List, typed on ABC (⇧7 = "&")
+  await page.waitForTimeout(60)
+  assert.equal(await doc(), 'Keys\nfirst\n• second', '⇧⌘7 makes a bulleted list')
+  // The same physical keys on Mongolian-Cyrillic, where ⇧7 types "7".
+  await page.evaluate(() =>
+    document.activeElement.dispatchEvent(
+      new KeyboardEvent('keydown', { key: '7', code: 'Digit7', metaKey: true, shiftKey: true, bubbles: true, cancelable: true })
+    )
+  )
+  await page.waitForTimeout(60)
+  assert.equal(await doc(), 'Keys\nfirst\nsecond', '⇧⌘7 works on the Mongolian layout (and toggles the list off)')
+  await page.keyboard.press('Meta+Shift+Digit9')
+  await page.keyboard.press('k')
+  await page.keyboard.press('Meta+Shift+Digit8')
+  await page.waitForTimeout(60)
+  assert.equal(await doc(), 'Keys\n- first\n1. second', '⇧⌘8 dashed, ⇧⌘9 numbered')
+  await page.keyboard.press('Meta+l') // Format ▸ Divider Line
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('g')
+  await page.keyboard.press('g')
+  await page.waitForTimeout(100)
+  assert.equal(await doc(), 'Keys\n- first\n---\n\n1. second', '⌘L inserts a divider below the line')
+  assert.equal(await page.locator('.cm-divider').count(), 1, 'the divider is drawn as a rule off the cursor line')
+  await shot('08e-divider')
+  assert.equal(await accelerator('Bulleted List'), 'Shift+Cmd+7', 'menu shows the default shortcut')
+
+  // keybindings.json changes apply live, VS Code style.
+  writeFileSync(
+    keybindingsFile,
+    `// my keys
+    [
+      { "key": "cmd+shift+6", "command": "bulleted-list" },
+      { "key": "cmd+shift+7", "command": "-bulleted-list" }, // trailing comma is fine
+    ]`
+  )
+  await page.waitForTimeout(600)
+  assert.equal(await accelerator('Bulleted List'), 'Shift+Cmd+6', 'menu follows keybindings.json')
+  await page.keyboard.press('Meta+Shift+Digit7')
+  await page.waitForTimeout(60)
+  assert.equal((await doc()).split('\n')[0], 'Keys', 'the removed default does nothing')
+  await page.keyboard.press('Meta+Shift+Digit6')
+  await page.waitForTimeout(60)
+  assert.equal((await doc()).split('\n')[0], '• Keys', '⇧⌘6 is now Bulleted List')
+  await page.keyboard.press('Meta+Shift+Digit6')
+
+  // The Keyboard Shortcuts window edits the same file.
+  await menu('keyboard-shortcuts')
+  await page.waitForTimeout(300)
+  const dialog = page.getByRole('dialog')
+  await dialog.getByPlaceholder(/Search commands/).fill('list')
+  await shot('08f-keyboard-shortcuts')
+  await dialog.getByRole('button', { name: 'Change ⇧⌘6' }).click()
+  await page.keyboard.press('Meta+Alt+Digit6')
+  await page.waitForTimeout(400)
+  assert.ok(await dialog.getByRole('button', { name: 'Change ⌥⌘6' }).count(), 'recorded the new shortcut')
+  assert.match(readFileSync(keybindingsFile, 'utf8'), /"key": "alt\+cmd\+6", "command": "bulleted-list"/, 'saved to keybindings.json')
+  await dialog.getByRole('button', { name: 'Reset Bulleted List' }).click()
+  await page.waitForTimeout(400)
+  assert.ok(await dialog.getByRole('button', { name: 'Change ⇧⌘7' }).count(), 'reset to the Apple Notes default')
+  await page.keyboard.press('Escape')
+  await dialog.waitFor({ state: 'detached', timeout: 2000 }) // Esc closes Keyboard Shortcuts
+
+  // A broken file keeps the defaults working and says what's wrong.
+  writeFileSync(keybindingsFile, '[ { "key": ')
+  await page.waitForTimeout(600)
+  await menu('keyboard-shortcuts')
+  await page.waitForTimeout(300)
+  assert.match(await page.getByRole('alert').first().innerText(), /isn't valid JSON/)
+  await page.keyboard.press('Escape')
+  await dialog.waitFor({ state: 'detached', timeout: 2000 })
+  await page.keyboard.press('Meta+Shift+Digit7')
+  await page.waitForTimeout(60)
+  assert.equal((await doc()).split('\n')[0], '• Keys', 'defaults still apply')
+  writeFileSync(keybindingsFile, '[]')
+  await page.waitForTimeout(400)
+
+
   const setTheme = (theme) => app.evaluate(({ nativeTheme }, t) => (nativeTheme.themeSource = t), theme)
   const appearance = () =>
     page.evaluate(() => ({

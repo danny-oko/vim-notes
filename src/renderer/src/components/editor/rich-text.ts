@@ -144,6 +144,13 @@ function buildDecorations(view: EditorView): DecorationSet {
           // Code is shown as typed, fences included.
           return false
         }
+        if (name === 'HorizontalRule') {
+          // Format ▸ Divider Line: a rule, showing the `---` only while editing that line.
+          const l = state.doc.lineAt(node.from)
+          if (active.has(l.number)) decorations.push(dimmed.range(node.from, node.to))
+          else decorations.push(line('cm-divider').range(l.from), hidden.range(node.from, node.to))
+          return false
+        }
         const heading = HEADING_CLASS[name]
         if (heading) return void decorations.push(line(heading).range(state.doc.lineAt(node.from).from))
         if (name === 'Blockquote') {

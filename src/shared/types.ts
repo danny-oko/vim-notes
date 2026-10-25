@@ -1,3 +1,5 @@
+import type { Keybinding, KeybindingsState } from './keybindings'
+
 /** Folder path relative to the notes root. `""` is the root ("Notes") folder. */
 export type FolderPath = string
 
@@ -103,12 +105,15 @@ export type MenuCommand =
   | 'bulleted-list'
   | 'dashed-list'
   | 'numbered-list'
+  | 'insert-divider'
   | 'move-line-up'
   | 'move-line-down'
   | 'indent'
   | 'outdent'
   | 'font-bigger'
   | 'font-smaller'
+  | 'zoom-in'
+  | 'zoom-out'
   | 'font-reset'
   | 'sort-updatedAt'
   | 'sort-createdAt'
@@ -117,6 +122,8 @@ export type MenuCommand =
   | 'toggle-note-count'
   | 'toggle-vim'
   | 'settings'
+  | 'keyboard-shortcuts'
+  | 'open-keybindings-json'
   | 'undo'
   | 'redo'
   | 'print'
@@ -151,6 +158,18 @@ export interface NotesApi {
 
   onLibraryChanged(listener: (library: Library) => void): () => void
   onMenuCommand(listener: (command: MenuCommand) => void): () => void
+  /**
+   * A menu item fired by its key equivalent rather than a click. The renderer
+   * owns keyboard shortcuts, so it decides what the key does (see keybindings.ts).
+   */
+  onMenuAccelerator(listener: (key: string) => void): () => void
+
+  getKeybindings(): Promise<KeybindingsState>
+  /** Rewrites keybindings.json with these user entries (from Keyboard Shortcuts). */
+  setUserKeybindings(entries: Keybinding[]): Promise<KeybindingsState>
+  /** Opens keybindings.json in the default editor for JSON files. */
+  openKeybindingsFile(): Promise<void>
+  onKeybindingsChanged(listener: (state: KeybindingsState) => void): () => void
   /** Keeps native menu checkmarks in sync with renderer state. */
   syncMenuState(state: MenuState): void
 }

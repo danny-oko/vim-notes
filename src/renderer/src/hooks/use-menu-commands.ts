@@ -2,25 +2,18 @@ import { useEffect } from 'react'
 import { deleteLineBoundaryBackward, indentLess, indentMore, moveLineDown, moveLineUp } from '@codemirror/commands'
 import { findNext, findPrevious, openSearchPanel } from '@codemirror/search'
 import type { EditorView } from '@codemirror/view'
-import { getCM } from '@replit/codemirror-vim'
 import type { MenuCommand } from '@shared/types'
 import { editorHandle } from '@/components/editor/editor-handle'
 import { setBlockStyle, toggleBlockQuote, toggleInlineStyle } from '@/components/editor/format-commands'
-import { toggleChecked, toggleList } from '@/components/editor/text-commands'
+import { insertDivider, toggleChecked, toggleList } from '@/components/editor/text-commands'
 import { nativeRedo, nativeUndo } from '@/components/editor/vim-undo'
 import { deleteNoteWithConfirm, focusSearch, printNote, saveNow } from '@/lib/actions'
+import { handleMenuAccelerator, installKeybindings } from '@/lib/keybindings'
 import { findNote, useNotes } from '@/store/notes-store'
 
 const MIN_FONT = 10
 const MAX_FONT = 32
 const DEFAULT_FONT = 15
-
-/** Text the user selected: Vim's visual mode, or a mouse/shift selection outside normal mode. */
-function hasTextSelection(view: EditorView): boolean {
-  if (view.state.selection.ranges.every((range) => range.empty)) return false
-  const vim = getCM(view)?.state.vim
-  return !vim || vim.visualMode || vim.insertMode
-}
 
 function isTextField(element: Element | null): boolean {
   return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
@@ -36,8 +29,13 @@ function inEditor(command: (view: EditorView) => boolean): void {
   }
 }
 
-/** Wires the native application menu (and its shortcuts) to app actions. */
-export function useMenuCommands(openSettings: () => void): void {
+export interface DialogOpeners {
+  openSettings(): void
+  openShortcuts(): void
+}
+
+/** Wires the native application menu and the keyboard shortcuts (keybindings.json) to app actions. */
+export function useMenuCommands({ openSettings, openShortcuts }: DialogOpeners): void {
   useEffect(() => {
     const handle = (command: MenuCommand): void => {
       const state = useNotes.getState()
@@ -112,6 +110,8 @@ export function useMenuCommands(openSettings: () => void): void {
           return inEditor((view) => toggleList(view, 'dashed'))
         case 'numbered-list':
           return inEditor((view) => toggleList(view, 'numbered'))
+        case 'insert-divider':
+          return inEditor(insertDivider)
         case 'move-line-up':
           return inEditor(moveLineUp)
         case 'move-line-down':
@@ -122,8 +122,10 @@ export function useMenuCommands(openSettings: () => void): void {
           return inEditor(indentLess)
 
         case 'font-bigger':
+        case 'zoom-in':
           return font(settings.fontSize + 1)
         case 'font-smaller':
+        case 'zoom-out':
           return font(settings.fontSize - 1)
         case 'font-reset':
           return font(DEFAULT_FONT)
@@ -131,8 +133,7 @@ export function useMenuCommands(openSettings: () => void): void {
         case 'focus-explorer':
           return state.focusExplorer()
         case 'toggle-list':
-          // ⌘B: bold when text is selected in the note, otherwise hide/show the sidebar.
-          if (editorHandle.hasFocus() && hasTextSelection(editorHandle.view!)) return inEditor((view) => toggleInlineStyle(view, 'bold'))
+          // ⌘B bolds selected text instead through its `when` clause (see DEFAULT_KEYBINDINGS).
           return state.toggleList()
         case 'toggle-sidebar':
           return void state.updateSettings({ sidebarVisible: !settings.sidebarVisible })
@@ -152,10 +153,21 @@ export function useMenuCommands(openSettings: () => void): void {
           return void state.updateSettings({ vimEnabled: !settings.vimEnabled })
         case 'settings':
           return openSettings()
+        case 'keyboard-shortcuts':
+          return openShortcuts()
+        case 'open-keybindings-json':
+          return void window.api.openKeybindingsFile()
       }
     }
-    return window.api.onMenuCommand(handle)
-  }, [openSettings])
+    const offMenu = window.api.onMenuCommand(handle)
+    const offAccelerator = window.api.onMenuAccelerator((key) => handleMenuAccelerator(key, handle))
+    const offKeys = installKeybindings(handle)
+    return () => {
+      offMenu()
+      offAccelerator()
+      offKeys()
+    }
+  }, [openSettings, openShortcuts])
 
   // Keep menu checkmarks and enabled states in sync with the app.
   useEffect(

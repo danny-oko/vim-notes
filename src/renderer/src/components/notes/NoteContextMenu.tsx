@@ -11,6 +11,7 @@ import {
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
 import { deleteNoteWithConfirm } from '@/lib/actions'
+import { useShortcut } from '@/lib/keybindings'
 import { useNotes } from '@/store/notes-store'
 
 /** The right-click menu for a note in the list or gallery. */
@@ -18,6 +19,8 @@ export function NoteContextMenu({ note, children }: { note: Note; children: Reac
   const folders = useNotes((s) => s.library!.folders)
   const { togglePin, duplicateNote, moveNote, recoverNote, selectNote } = useNotes.getState()
   const deleted = note.deletedAt !== undefined
+  const duplicateKey = useShortcut('duplicate-note')
+  const deleteKey = useShortcut('delete-note')
   const destinations = [{ path: '', name: 'Notes', depth: 0 }, ...folders].filter((f) => f.path !== note.folder)
 
   return (
@@ -46,14 +49,14 @@ export function NoteContextMenu({ note, children }: { note: Note; children: Reac
               </ContextMenuSubContent>
             </ContextMenuSub>
             <ContextMenuItem onSelect={() => void duplicateNote(note.id)}>
-              Duplicate Note<ContextMenuShortcut>⌘D</ContextMenuShortcut>
+              Duplicate Note{duplicateKey && <ContextMenuShortcut>{duplicateKey}</ContextMenuShortcut>}
             </ContextMenuItem>
           </>
         )}
         <ContextMenuItem onSelect={() => void window.api.revealNote(note.id)}>Show in Finder</ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" onSelect={() => void deleteNoteWithConfirm(note.id)}>
-          Delete<ContextMenuShortcut>⌘⌫</ContextMenuShortcut>
+          Delete{deleteKey && <ContextMenuShortcut>{deleteKey}</ContextMenuShortcut>}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

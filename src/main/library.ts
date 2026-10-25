@@ -31,6 +31,7 @@ const toPosix = (p: string): string => p.split(sep).join('/')
 function fileStem(content: string): string {
   const stem = noteTitle(content)
     // Characters that are illegal or awkward in file names on macOS/Windows.
+    // eslint-disable-next-line no-control-regex
     .replace(/[/\\:*?"<>|\u0000-\u001f]/g, '-')
     .replace(/^[.\s]+|[.\s]+$/g, '')
     .slice(0, MAX_FILE_STEM)
